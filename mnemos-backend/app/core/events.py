@@ -22,6 +22,12 @@ async def lifespan(app: FastAPI):
     init_db()
     ensure_master_key()
     try:
+        from app.services import vector_repo
+
+        vector_repo.ensure_schema()
+    except Exception as e:
+        log.error("could not ensure pgvector schema: %s", e)
+    try:
         loop = asyncio.get_running_loop()
         from app.services import websocket_hub
 

@@ -17,6 +17,38 @@ _lock = threading.RLock()
 _pool: list[psycopg.Connection] = []
 _POOL_SIZE = 4
 
+_DDL = """
+CREATE EXTENSION IF NOT EXISTS vector;
+
+CREATE TABLE IF NOT EXISTS face_embeddings (
+    id           UUID PRIMARY KEY,
+    crop_id      UUID NOT NULL,
+    person_id    UUID NOT NULL,
+    embedding    vector(512) NOT NULL,
+    model_name   TEXT NOT NULL,
+    is_averaged  BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS face_embeddings_embedding_hnsw
+    ON face_embeddings
+    USING hnsw (embedding vector_cosine_ops)
+    WITH (m = 16, ef_construction = 64);
+
+CREATE INDEX IF NOT EXISTS face_embeddings_person_model_idx
+    ON face_embeddings (person_id, model_name);
+
+CREATE INDEX IF NOT EXISTS face_embeddings_crop_idx
+    ON face_embeddings (crop_id);
+"""
+
+
+def ensure_schema() -> None:
+    with get_conn() as c, c.cursor() as cur:
+        cur.execute(_DDL)
+        c.commit()
+    log.info("pgvector schema ensured (face_embeddings + indexes)")
+
 
 def _open() -> psycopg.Connection:
     return psycopg.connect(settings.vector_dsn, autocommit=False, connect_timeout=5)

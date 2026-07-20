@@ -1,0 +1,223 @@
+# =============================================================================
+# Release: Mnemos Services
+# =============================================================================
+#
+# Builds and pushes Docker images to GHCR (`<version>` and `stable` tags)
+# and creates GitHub releases with AI-generated notes.
+#
+# Trigger: Manual `workflow_dispatch` with target service selection.
+# =============================================================================
+
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Service to release'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+          - backend
+          - frontend
+          - both
+
+permissions:
+  contents: write
+  packages: write
+  models: read
+
+jobs:
+  matrix-setup:
+    name: Determine release targets
+    runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.set-matrix.outputs.targets }}
+    steps:
+      - id: set-matrix
+        run: |
+          if [[ "${{ inputs.target }}" == "both" ]]; then
+            echo 'targets=["backend", "frontend"]' >> "$GITHUB_OUTPUT"
+          else
+            echo "targets=[\"${{ inputs.target }}\"]" >> "$GITHUB_OUTPUT"
+          fi
+
+  prepare:
+    name: Prepare (${{ matrix.service }})
+    needs: matrix-setup
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: ${{ fromJSON(needs.matrix-setup.outputs.targets) }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read service version
+        id: version
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^__version__[[:space:]]*=[[:space:]]*["'"'"']\([^"'"'"']*\)["'"'"'].*/\1/p' \
+            mnemos-${{ matrix.service }}/app/_version.py | head -n1)"
+          if [[ -z "$version" ]]; then
+            echo "::error::Could not read version from mnemos-${{ matrix.service }}/app/_version.py"
+            exit 1
+          fi
+          tag="mnemos-${{ matrix.service }}-v${version}"
+          echo "Read ${{ matrix.service }} version: $version (tag: $tag)"
+
+  test:
+    name: Test release candidate
+    needs: matrix-setup
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  release:
+    name: Publish (${{ matrix.service }})
+    needs:
+      - matrix-setup
+      - prepare
+      - test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: ${{ fromJSON(needs.matrix-setup.outputs.targets) }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read version for target
+        id: version
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^__version__[[:space:]]*=[[:space:]]*["'"'"']\([^"'"'"']*\)["'"'"'].*/\1/p' \
+            mnemos-${{ matrix.service }}/app/_version.py | head -n1)"
+          if [[ -z "$version" ]]; then
+            echo "::error::Could not read version from mnemos-${{ matrix.service }}/app/_version.py"
+            exit 1
+          fi
+          tag="mnemos-${{ matrix.service }}-v${version}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata for image
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/mnemos-${{ matrix.service }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ steps.version.outputs.version }}
+            type=raw,value=stable
+          flavor: latest=auto
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./mnemos-${{ matrix.service }}
+          file: ./mnemos-${{ matrix.service }}/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Collect commits for changelog
+        id: commits
+        run: |
+          set -euo pipefail
+          previous_tag="$(git describe --tags --match "mnemos-${{ matrix.service }}-*" --abbrev=0 2>/dev/null || true)"
+          if [[ -n "$previous_tag" ]]; then
+            range="${previous_tag}..HEAD"
+          else
+            range="HEAD"
+          fi
+          {
+            echo "commits<<EOF"
+            git log "$range" --pretty=format:"- %s (%h)%n%b" --name-only --no-merges -- "mnemos-${{ matrix.service }}"
+            echo
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Generate changelog with GitHub AI
+        id: ai_changelog
+        continue-on-error: true
+        uses: actions/ai-inference@v2
+        with:
+          model: openai/gpt-4o
+          max-tokens: 700
+          system-prompt: >-
+            You write concise GitHub release notes for Mnemos (a self-hosted
+            facial recognition stack). Use Markdown bullets. Do not invent
+            changes. Focus only on user-visible changes.
+          prompt: |
+            Create release notes for mnemos-${{ matrix.service }}.
+
+            Commits:
+            ${{ steps.commits.outputs.commits }}
+
+      - name: Write release notes
+        env:
+          AI_NOTES_FILE: ${{ steps.ai_changelog.outputs.response-file }}
+          COMMITS: ${{ steps.commits.outputs.commits }}
+        run: |
+          set -euo pipefail
+          {
+            echo
+            if [[ -n "${AI_NOTES_FILE:-}" && -s "$AI_NOTES_FILE" ]]; then
+              cat "$AI_NOTES_FILE"
+            else
+              echo "## Changes"
+              echo
+              echo "${COMMITS:-"- Maintenance release"}"
+            fi
+            echo
+            echo "## Docker image"
+            echo "\`\`\`"
+            echo "docker pull ghcr.io/${{ github.repository_owner }}/mnemos-${{ matrix.service }}:${{ steps.version.outputs.version }}"
+            echo "docker pull ghcr.io/${{ github.repository_owner }}/mnemos-${{ matrix.service }}:stable"
+            echo "\`\`\`"
+          } > release-notes.md
+
+      - name: Bundle release artifacts
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp docker-compose.yml "dist/docker-compose.yml"
+          cp .env.example "dist/.env.example"
+          sed "s/\${MNEMOS_TAG:-latest}/${{ steps.version.outputs.version }}/g" docker-compose.yml \
+            > "dist/docker-compose.pinned.yml"
+          cd dist
+          zip -r "mnemos-${{ matrix.service }}-${{ steps.version.outputs.version }}-compose.zip" \
+            docker-compose.yml .env.example docker-compose.pinned.yml
+          cd ..
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" \
+            "dist/mnemos-${{ matrix.service }}-${VERSION}-compose.zip" \
+            --title "mnemos-${{ matrix.service }} ${TAG}" \
+            --notes-file release-notes.md \
+            --target "${{ github.sha }}" \
+            --clobber

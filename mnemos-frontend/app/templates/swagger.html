@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>API · Mnemos</title>
+  <link rel="stylesheet" href="/static/css/app.css" />
+  <link rel="stylesheet" href="/static/vendor/swagger/swagger-ui.css" />
+  <link rel="stylesheet" href="/static/css/swagger.css" />
+</head>
+<body class="swagger-host">
+  <header class="swagger-topbar">
+    <a class="swagger-brand" href="/dashboard">
+      <span class="swagger-logo" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 32 32" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="16" cy="12" r="5"/>
+          <path d="M6 26c0-5.5 4.5-10 10-10s10 4.5 10 10"/>
+        </svg>
+      </span>
+      <span>Mnemos</span>
+    </a>
+    <span class="swagger-divider" aria-hidden="true"></span>
+    <span class="swagger-title">API Explorer</span>
+    <span class="swagger-grow"></span>
+    <span class="swagger-server">
+      <span class="swagger-server-dot" aria-hidden="true"></span>
+      <code id="swagger-server-url">/backend</code>
+    </span>
+    <a class="swagger-link-btn" href="/backend/openapi.json" target="_blank" rel="noopener">
+      <i class="fa-solid fa-code" aria-hidden="true"></i>
+      <span>openapi.json</span>
+    </a>
+    <a class="swagger-link-btn" href="/dashboard">
+      <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+      <span>Back to dashboard</span>
+    </a>
+  </header>
+
+  <div class="swagger-shell">
+    <aside class="swagger-side">
+      <div class="swagger-side-section">
+        <div class="swagger-side-title">Filter</div>
+        <div class="swagger-search-wrap">
+          <i class="fa-solid fa-magnifying-glass swagger-search-icon" aria-hidden="true"></i>
+          <input id="swagger-filter" type="search" placeholder="Search endpoints…" autocomplete="off" />
+        </div>
+        <div class="swagger-tags" id="swagger-tags"></div>
+      </div>
+      <div class="swagger-side-section">
+        <div class="swagger-side-title">Auth</div>
+        <label class="swagger-auth-row">
+          <span>X-API-Key</span>
+          <input id="swagger-apikey" type="password" placeholder="mnemos_k_…" autocomplete="off" />
+        </label>
+        <button class="swagger-auth-save" id="swagger-apikey-save" type="button">
+          <i class="fa-solid fa-floppy-disk" aria-hidden="true"></i>
+          <span>Save to this browser</span>
+        </button>
+        <button class="swagger-auth-clear" id="swagger-apikey-clear" type="button">
+          <i class="fa-solid fa-eraser" aria-hidden="true"></i>
+          <span>Clear</span>
+        </button>
+      </div>
+    </aside>
+    <main class="swagger-main">
+      <div id="swagger-loading" class="swagger-loading">
+        <div class="swagger-spinner" aria-hidden="true"></div>
+        <div>Loading the OpenAPI schema…</div>
+      </div>
+      <div id="swagger-content" class="swagger-content" hidden></div>
+    </main>
+  </div>
+
+  <script src="/static/vendor/swagger/swagger-ui-bundle.js"></script>
+  <script>
+    (function () {
+      const SCHEMA_URL = "/backend/openapi.json";
+      const STORAGE_KEY = "mnemos.swagger.apiKey";
+      const SCHEMA_CACHE = "mnemos.swagger.schema";
+      let cachedKey = "";
+      let schema = null;
+
+      try { cachedKey = localStorage.getItem(STORAGE_KEY) || ""; } catch (_) {}
+      const apikeyInput = document.getElementById("swagger-apikey");
+      const apikeySave = document.getElementById("swagger-apikey-save");
+      const apikeyClear = document.getElementById("swagger-apikey-clear");
+      const filterInput = document.getElementById("swagger-filter");
+      const loading = document.getElementById("swagger-loading");
+      const content = document.getElementById("swagger-content");
+      const tagsEl = document.getElementById("swagger-tags");
+
+      function applyApiKey(value) {
+        cachedKey = (value || "").trim();
+        apikeyInput.value = cachedKey;
+        try {
+          if (cachedKey) localStorage.setItem(STORAGE_KEY, cachedKey);
+          else localStorage.removeItem(STORAGE_KEY);
+        } catch (_) {}
+        const ap = window.ui && window.ui.authSelectors && window.ui.authSelectors.apiKeyAuth;
+        if (ap) {
+          try { ap.setValue(cachedKey); } catch (_) {}
+        }
+      }
+
+      apikeyInput.addEventListener("change", () => applyApiKey(apikeyInput.value));
+      apikeySave.addEventListener("click", () => applyApiKey(apikeyInput.value));
+      apikeyClear.addEventListener("click", () => applyApiKey(""));
+
+      filterInput.addEventListener("input", () => {
+        const term = (filterInput.value || "").trim();
+        try {
+          window.ui && window.ui.filterActions && window.ui.filterActions.update(term);
+        } catch (_) {}
+        highlightTags();
+      });
+
+      async function loadSchema() {
+        try {
+          const cached = sessionStorage.getItem(SCHEMA_CACHE);
+          if (cached) return JSON.parse(cached);
+        } catch (_) {}
+        const r = await fetch(SCHEMA_URL, { credentials: "same-origin" });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const j = await r.json();
+        try { sessionStorage.setItem(SCHEMA_CACHE, JSON.stringify(j)); } catch (_) {}
+        return j;
+      }
+
+      function tagFor(method) {
+        return ({
+          get: "swagger-tag-get",
+          post: "swagger-tag-post",
+          put: "swagger-tag-put",
+          patch: "swagger-tag-patch",
+          delete: "swagger-tag-delete",
+          options: "swagger-tag-get",
+          head: "swagger-tag-get",
+        })[String(method).toLowerCase()] || "swagger-tag-get";
+      }
+
+      function buildTagIndex(s) {
+        const byTag = new Map();
+        const paths = (s && s.paths) || {};
+        for (const path of Object.keys(paths)) {
+          const item = paths[path] || {};
+          for (const method of Object.keys(item)) {
+            if (["summary", "description", "parameters", "responses", "requestBody", "security", "tags", "operationId", "deprecated", "servers"].indexOf(method) === -1) {
+              const op = item[method];
+              if (!op || typeof op !== "object") continue;
+              const tags = (op.tags && op.tags.length) ? op.tags : ["default"];
+              for (const t of tags) {
+                if (!byTag.has(t)) byTag.set(t, []);
+                byTag.get(t).push({ path, method, op });
+              }
+            }
+          }
+        }
+        return byTag;
+      }
+
+      function renderTags(s) {
+        const byTag = buildTagIndex(s);
+        const tags = Array.from(byTag.keys()).sort();
+        const parts = [];
+        parts.push(`<button class="swagger-tag-pill is-active" data-tag="">All <span>${Array.from(byTag.values()).reduce((a, b) => a + b.length, 0)}</span></button>`);
+        for (const t of tags) {
+          parts.push(`<button class="swagger-tag-pill" data-tag="${escapeAttr(t)}">${escapeHtml(t)} <span>${byTag.get(t).length}</span></button>`);
+        }
+        tagsEl.innerHTML = parts.join("");
+        tagsEl.querySelectorAll(".swagger-tag-pill").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const tag = btn.getAttribute("data-tag") || "";
+            tagsEl.querySelectorAll(".swagger-tag-pill").forEach((b) => b.classList.toggle("is-active", b === btn));
+            try {
+              window.ui && window.ui.layoutActions && window.ui.layoutActions.show(["operations"], true);
+              const ops = window.ui && window.ui.getOperations && window.ui.getOperations();
+              if (ops) {
+                for (const tagName of Object.keys(ops)) {
+                  if (ops[tagName]) {
+                    ops[tagName].filter = !tag || tagName === tag;
+                  }
+                }
+              }
+            } catch (_) {}
+            if (filterInput.value) {
+              try {
+                window.ui && window.ui.filterActions && window.ui.filterActions.update(filterInput.value);
+              } catch (_) {}
+            }
+          });
+        });
+      }
+
+      function highlightTags() {
+        const term = (filterInput.value || "").trim().toLowerCase();
+        tagsEl.querySelectorAll(".swagger-tag-pill").forEach((btn) => {
+          const txt = (btn.textContent || "").toLowerCase();
+          btn.classList.toggle("is-match", !term || txt.indexOf(term) !== -1);
+        });
+      }
+
+      function escapeHtml(s) {
+        return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      }
+      function escapeAttr(s) { return escapeHtml(s).replace(/"/g, "&quot;"); }
+
+      loadSchema()
+        .then((s) => {
+          schema = s;
+          loading.hidden = true;
+          content.hidden = false;
+          window.ui = SwaggerUIBundle({
+            spec: s,
+            dom_id: "#swagger-content",
+            deepLinking: true,
+            presets: [SwaggerUIBundle.presets.apis],
+            layout: "BaseLayout",
+            defaultModelsExpandDepth: 0,
+            defaultModelExpandDepth: 1,
+            docExpansion: "list",
+            filter: true,
+            displayRequestDuration: true,
+            showExtensions: false,
+            showCommonExtensions: false,
+            requestInterceptor: function (req) {
+              if (cachedKey && req.headers) {
+                try {
+                  const u = new URL(req.url, window.location.origin);
+                  if (u.origin === window.location.origin) {
+                    req.headers["X-API-Key"] = cachedKey;
+                  }
+                } catch (_) { /* leave alone */ }
+              }
+              return req;
+            },
+            onComplete: function () {
+              const ap = window.ui && window.ui.authSelectors && window.ui.authSelectors.apiKeyAuth;
+              if (ap && ap.value) applyApiKey(ap.value);
+              else if (cachedKey) applyApiKey(cachedKey);
+              renderTags(schema);
+              if (filterInput.value) {
+                try { window.ui.filterActions.update(filterInput.value); } catch (_) {}
+              }
+            },
+          });
+        })
+        .catch((e) => {
+          loading.innerHTML =
+            '<div class="swagger-error">' +
+            '<i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>' +
+            '<div><strong>Could not load the OpenAPI schema.</strong>' +
+            '<div class="muted">' + escapeHtml(e && e.message ? e.message : String(e)) + '</div>' +
+            '</div></div>';
+        });
+    })();
+  </script>
+</body>
+</html>

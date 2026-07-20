@@ -1,0 +1,22 @@
+meta {
+  name: "Get master key"
+  type: "http"
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/system/master
+  body: none
+  auth: none
+}
+
+docs {
+  Return the current master key as plain text. **Full-Admin** only.
+
+  Note: the X-API-Key header is set automatically by the collection-level pre-request script.
+  You will need a Full-Admin key already to call this.
+}
+
+settings {
+  encodeUrl: true
+}

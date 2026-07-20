@@ -1,0 +1,21 @@
+meta {
+  name: "Rotate master key"
+  type: "http"
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/system/master/rotate
+  body: none
+  auth: none
+}
+
+docs {
+  Generate a new master key, replacing the old one. **Full-Admin** only.
+
+  Returns the new master key as plain text. Existing API keys are unaffected.
+}
+
+settings {
+  encodeUrl: true
+}

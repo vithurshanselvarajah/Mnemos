@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Identify · Mnemos{% endblock %}
+{% block content %}
+<div class="row between" style="margin-bottom: 1rem">
+  <div>
+    <h1>Identify a snapshot</h1>
+    <p class="muted">Upload a JPEG/PNG/WebP and Mnemos will return recognized people and any unknown faces.</p>
+  </div>
+</div>
+
+<div class="card">
+  <form id="identify-form"
+        hx-post="/backend/identify"
+        hx-target="#identify-result"
+        hx-encoding="multipart/form-data"
+        hx-swap="innerHTML"
+        hx-indicator="#identify-spinner"
+        class="row" style="gap:.5rem">
+    <label style="margin:0;flex:1">Image
+      <input type="file" name="file" accept="image/*" required />
+    </label>
+    <button>Run identify</button>
+    <span id="identify-spinner" class="htmx-indicator muted" style="align-self: center">Running…</span>
+  </form>
+</div>
+
+<div id="identify-result" class="card" style="margin-top: 1rem"></div>
+<script>
+  (function () {
+    const form = document.getElementById('identify-form');
+    const fileInput = form ? form.querySelector('input[type="file"]') : null;
+    let lastFile = null;
+    if (fileInput) {
+      fileInput.addEventListener('change', () => {
+        if (fileInput.files && fileInput.files.length) {
+          lastFile = fileInput.files[0];
+        }
+      });
+    }
+    window.__mnemosRerunIdentify = function () {
+      if (!lastFile) {
+        return Promise.resolve(false);
+      }
+      try {
+        const dt = new DataTransfer();
+        dt.items.add(lastFile);
+        fileInput.files = dt.files;
+      } catch (_) { /* DataTransfer not supported, fall through */ }
+      if (typeof htmx !== 'undefined') {
+        htmx.trigger(form, 'submit');
+        return Promise.resolve(true);
+      }
+      return Promise.resolve(false);
+    };
+  })();
+
+  document.body.addEventListener('htmx:afterRequest', (e) => {
+    const swapId = e.detail && e.detail.target && e.detail.target.id;
+    const cfgId = e.detail && e.detail.requestConfig && e.detail.requestConfig.target;
+    if (swapId === 'identify-result' || cfgId === '#identify-result') {
+      e.detail.target.style.display = 'block';
+    }
+  });
+</script>
+{% endblock %}

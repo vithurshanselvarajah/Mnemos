@@ -1,0 +1,23 @@
+meta {
+  name: "Get person"
+  type: "http"
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/v1/persons/{{lastPersonId}}
+  body: none
+  auth: none
+}
+
+docs {
+  Fetch a single person by UUID. 404 if not found.
+
+  The `{{lastPersonId}}` env var is auto-populated by the "Create person" and
+  "Assign crops" post-response scripts. Replace it inline if you have a
+  specific UUID.
+}
+
+settings {
+  encodeUrl: true
+}

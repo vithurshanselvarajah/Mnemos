@@ -1,0 +1,24 @@
+meta {
+  name: "Delete a crop from a person"
+  type: "http"
+  seq: 7
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/persons/{{lastPersonId}}/crops/REPLACE_WITH_CROP_UUID
+  body: none
+  auth: none
+}
+
+docs {
+  Delete a single assigned crop from a person. Removes the JPEG + thumbnail
+  files from disk, deletes the DB row, and rebuilds that person's averaged
+  vector under the active model.
+
+  - **Permission:** Full-Admin.
+  - **Errors:** 404 if the crop doesn't belong to that person.
+}
+
+settings {
+  encodeUrl: true
+}

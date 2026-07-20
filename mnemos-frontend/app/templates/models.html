@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% block title %}Models · Mnemos{% endblock %}
+{% block content %}
+<div class="row between" style="margin-bottom: 1rem">
+  <div>
+    <h1>Detection model</h1>
+    <p class="muted">Switching models re-indexes every stored face under the new embedding space.</p>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Active model</h3>
+  <div hx-get="/partials/reindex-status" hx-trigger="load, every 2s" hx-swap="outerHTML">
+    <p class="muted">Loading…</p>
+  </div>
+</div>
+
+{% if is_admin %}
+<div class="card"
+     x-data="modelSwitcher()"
+     x-init="init()">
+  <h3>Switch model</h3>
+  <form @submit.prevent="onSubmit()"
+        class="row" style="gap:.5rem">
+    <label style="margin:0;flex:1">New model
+      <select name="name" x-model="target">
+        <option value="buffalo_s">buffalo_s — fast, default</option>
+        <option value="buffalo_l">buffalo_l — more accurate, larger</option>
+      </select>
+    </label>
+    <button type="submit" :disabled="busy" :class="{ working: busy }">
+      <span x-show="!busy">Switch &amp; re-index</span>
+      <span x-show="busy" x-cloak>
+        <span class="spinner-inline"></span>
+        Switching…
+      </span>
+    </button>
+  </form>
+
+  <div class="model-result" :class="'is-' + state" x-show="state !== 'idle'" x-cloak>
+    <div class="model-result__row">
+      <div class="model-result__icon" aria-hidden="true" x-show="state === 'error'">
+        <span class="model-result__icon-fail">!</span>
+      </div>
+      <div class="model-result__copy" x-show="state === 'busy'">
+        <div class="model-result__title">
+          <strong>Switching to <code x-text="target"></code>…</strong>
+        </div>
+        <div class="model-result__hint muted" x-show="phase === 'preparing'">
+          Downloading model weights
+          <span x-text="downloadLabel"></span>
+        </div>
+        <div class="model-result__progress" x-show="phase === 'preparing'">
+          <div class="model-result__bar">
+            <div class="model-result__bar-fill"
+                 :class="{ indeterminate: !downloadTotal }"
+                 :style="downloadBarStyle"></div>
+          </div>
+        </div>
+        <div class="model-result__hint muted" x-show="phase === 'reindexing'">
+          <span x-show="reindexTotal">
+            Re-embedding faces <span x-text="reindexDone"></span>/<span x-text="reindexTotal"></span>…
+          </span>
+          <span x-show="!reindexTotal">
+            Re-embedding every stored face. You can keep using Mnemos; old matches
+            will still work.
+          </span>
+        </div>
+      </div>
+      <div class="model-result__copy" x-show="state === 'error'">
+        <div class="model-result__title err">
+          <strong>Could not switch.</strong>
+        </div>
+        <div class="model-result__hint" x-text="errorMessage"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  window.modelSwitcher = function modelSwitcher() {
+    return {
+      target: 'buffalo_s',
+      busy: false,
+      state: 'idle',          // idle | busy | error
+      phase: 'reindexing',    // preparing | reindexing
+      errorMessage: '',
+      downloadDone: 0,
+      downloadTotal: 0,
+      reindexDone: 0,
+      reindexTotal: 0,
+      get downloadPct() {
+        if (!this.downloadTotal) return null;
+        return Math.min(100, Math.round(100 * this.downloadDone / this.downloadTotal));
+      },
+      get downloadLabel() {
+        const pct = this.downloadPct;
+        if (pct === null) {
+          if (this.downloadDone) {
+            return `(${this._formatBytes(this.downloadDone)} downloaded)`;
+          }
+          return '…';
+        }
+        return `(${pct}%, ${this._formatBytes(this.downloadDone)} / ${this._formatBytes(this.downloadTotal)})`;
+      },
+      get downloadBarStyle() {
+        const pct = this.downloadPct;
+        if (pct === null) {
+          return 'width: 0';
+        }
+        return `width: ${pct}%`;
+      },
+      _formatBytes(n) {
+        if (!n) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB'];
+        let i = 0;
+        while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+        return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${units[i]}`;
+      },
+      _pollTimer: null,
+      init() {
+        document.addEventListener('ws:reindex.start', (e) => {
+          this.state = 'busy';
+          this.phase = (e.detail && e.detail.phase) || 'reindexing';
+          this.busy = true;
+          if (this.phase === 'reindexing') {
+            this.downloadDone = 0;
+            this.downloadTotal = 0;
+          }
+        });
+        document.addEventListener('ws:reindex.preparing', () => {
+          this.phase = 'preparing';
+          this.downloadDone = 0;
+          this.downloadTotal = 0;
+        });
+        document.addEventListener('ws:reindex.progress', (e) => {
+          this.phase = 'reindexing';
+          if (e.detail) {
+            this.reindexDone = e.detail.done || 0;
+            this.reindexTotal = e.detail.total || 0;
+          }
+        });
+        document.addEventListener('ws:reindex.download', (e) => {
+          if (!e.detail) return;
+          this.phase = 'preparing';
+          this.downloadDone = e.detail.done || 0;
+          this.downloadTotal = e.detail.total || 0;
+        });
+        document.addEventListener('ws:reindex.done', () => {
+          this.state = 'idle';
+          this.phase = 'reindexing';
+          this.busy = false;
+          this.downloadDone = 0;
+          this.downloadTotal = 0;
+          this.reindexDone = 0;
+          this.reindexTotal = 0;
+          try {
+            const el = document.querySelector('[hx-get="/partials/reindex-status"]');
+            if (el) {
+              el.setAttribute('hx-trigger', 'load, every 2s');
+              if (window.htmx) htmx.trigger(el, 'load');
+            }
+          } catch (_) {}
+        });
+        document.addEventListener('ws:reindex.error', (e) => {
+          this.busy = false;
+          this.state = 'error';
+          this.errorMessage = (e.detail && e.detail.message) || 'Unknown error';
+        });
+      },
+      async onSubmit() {
+        if (this.busy) return;
+        this.busy = true;
+        this.state = 'busy';
+        this.phase = 'preparing';
+        this.errorMessage = '';
+        try {
+          const r = await fetch('/backend/models/switch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ name: this.target }),
+          });
+          if (r.status === 409) {
+            this.busy = false;
+            this.state = 'error';
+            this.errorMessage = 'A re-index is already running.';
+            return;
+          }
+          if (!r.ok) {
+            this.busy = false;
+            this.state = 'error';
+            let msg = 'Backend refused the request.';
+            try { msg = (await r.json()).detail || msg; } catch (_) {}
+            this.errorMessage = msg;
+            return;
+          }
+          try {
+            const el = document.querySelector('[hx-get="/partials/reindex-status"]');
+            if (el && window.htmx) htmx.trigger(el, 'load');
+          } catch (_) {}
+        } catch (e) {
+          this.busy = false;
+          this.state = 'error';
+          this.errorMessage = 'Network error: ' + e.message;
+        }
+      },
+    };
+  };
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,38 @@
+meta {
+  name: "Ignore crops"
+  type: "http"
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/v1/faces/ignore
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "crop_ids": [
+      "REPLACE_WITH_CROP_UUID_1"
+    ]
+  }
+}
+
+docs {
+  Mark crops as `IGNORED` — they won't show in the inbox, won't be matched in
+  identify, but are still kept on disk. Use this when the detection is a real
+  face but you don't want to train on it (e.g. celebrity in the background).
+
+  - **Permission:** Full-Admin.
+  - **Side effect:** publishes WebSocket `inbox.bulk_changed`.
+
+  Returns: `{ ok, count }`.
+}
+
+settings {
+  encodeUrl: true
+}

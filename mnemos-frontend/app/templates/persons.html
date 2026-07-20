@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Persons · Mnemos{% endblock %}
+{% block content %}
+<div class="row between" style="margin-bottom: .5rem">
+  <h1>Persons</h1>
+</div>
+
+{% if is_admin %}
+<div class="card">
+  <h3>Add a person</h3>
+  <form id="add-person-form" hx-post="/backend/persons" hx-ext="json-enc" class="row" style="gap:.5rem">
+    <label style="margin:0;flex:1">Name
+      <input name="name" required />
+    </label>
+    <label style="margin:0;width:160px">Custom threshold
+      <input name="custom_threshold" type="number" min="0" max="1" step="0.01" placeholder="0.40" />
+    </label>
+    <button>Add person</button>
+  </form>
+  <div id="add-person-error" class="error-banner" style="display:none"></div>
+  <script>
+    document.getElementById('add-person-form').addEventListener('htmx:afterRequest', (e) => {
+      const errEl = document.getElementById('add-person-error');
+      if (e.detail.successful) {
+        e.target.reset();
+        errEl.style.display = 'none';
+        htmx.ajax('GET', '/partials/persons', { target: '#persons-list', swap: 'outerHTML' });
+        return;
+      }
+      let msg = 'Failed (' + e.detail.xhr.status + ')';
+      try {
+        const d = JSON.parse(e.detail.xhr.responseText);
+        if (d.detail) {
+          msg = Array.isArray(d.detail)
+            ? d.detail.map(x => x.msg || JSON.stringify(x)).join('; ')
+            : d.detail;
+        }
+      } catch (_) { /* keep default msg */ }
+      errEl.textContent = msg;
+      errEl.style.display = 'block';
+    });
+  </script>
+</div>
+{% endif %}
+
+<div class="card" id="persons-list">
+  {% include "partials/persons_list.html" %}
+</div>
+{% endblock %}

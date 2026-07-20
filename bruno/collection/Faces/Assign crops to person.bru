@@ -1,0 +1,50 @@
+meta {
+  name: "Assign crops to person"
+  type: "http"
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/faces/assign
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "crop_ids": [
+      "REPLACE_WITH_CROP_UUID_1",
+      "REPLACE_WITH_CROP_UUID_2"
+    ],
+    "person_id": "REPLACE_WITH_PERSON_UUID"
+  }
+}
+
+docs {
+  Assign one or more crops to an existing person (by `person_id`) **or** to a new
+  person (by `new_person_name` — case-insensitive uniqueness enforced). You must
+  supply **exactly one** of `person_id` / `new_person_name`.
+
+  Rebuilds the averaged pgvector embedding for that person under the active model.
+
+  - **Permission:** Full-Admin.
+  - **Side effect:** publishes WebSocket `inbox.bulk_changed`.
+
+  Returns: `{ ok, person_id, count, person: { id, name } }`.
+}
+
+script:post-response {
+  // Capture the created/existing person id into an env var so subsequent
+  // requests (e.g. "Get person", "List person's crops") can chain.
+  if (res.status === 200 && res.body && res.body.person_id) {
+    bru.setEnvVar("lastPersonId", res.body.person_id);
+  }
+}
+
+settings {
+  encodeUrl: true
+}

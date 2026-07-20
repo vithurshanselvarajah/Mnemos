@@ -1,0 +1,24 @@
+meta {
+  name: "Get crop image"
+  type: "http"
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/crops/REPLACE_WITH_CROP_UUID.jpg
+  body: none
+  auth: none
+}
+
+docs {
+  Stream a stored crop JPEG. `filename` must be `<uuid>.jpg`. The
+  `Cache-Control` header is `private, max-age=300`.
+
+  - **Permission:** any API key.
+  - **Returns:** `image/jpeg` bytes.
+  - **Errors:** 404 if filename is malformed, row missing, or file missing on disk.
+}
+
+settings {
+  encodeUrl: true
+}

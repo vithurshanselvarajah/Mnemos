@@ -1,0 +1,29 @@
+meta {
+  name: "List unassigned crops (inbox)"
+  type: "http"
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/faces/unassigned?page=1&page_size=24
+  body: none
+  auth: none
+}
+
+params:query {
+  page: 1
+  page_size: 24
+}
+
+docs {
+  Paginated list of `UNASSIGNED` crops (the inbox). Default `page_size` is 24,
+  max 200. The `items[].image_url` is relative to the API base, e.g.
+  `/api/v1/crops/<uuid>.jpg`.
+
+  Returns: `{ total, page, page_size, items: [{ id, person_id, image_url,
+  bounding_box, det_score, status, created_at }, ...] }`.
+}
+
+settings {
+  encodeUrl: true
+}

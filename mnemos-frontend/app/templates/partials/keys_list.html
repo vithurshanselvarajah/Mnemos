@@ -1,0 +1,34 @@
+{% if keys %}
+<table>
+  <thead>
+    <tr><th>Name</th><th>Prefix</th><th>Permission</th><th>Created</th><th>Status</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for k in keys %}
+    <tr>
+      <td><strong>{{ k.name }}</strong></td>
+      <td><code>{{ k.key_prefix }}…</code></td>
+      <td><span class="status {{ 'ok' if k.permission_level == 'Full-Admin' else 'info' }}">{{ k.permission_level }}</span></td>
+      <td class="muted"><small>{{ k.created_at }}</small></td>
+      <td>{% if k.revoked_at %}<span class="status error">revoked</span>{% else %}<span class="status ok">active</span>{% endif %}</td>
+      <td style="text-align:right; white-space:nowrap">
+        {% if is_admin %}
+        {% if not k.revoked_at %}
+          <button class="btn ghost sm" hx-post="/backend/keys/{{ k.id }}/revoke"
+                  hx-on::after-request="htmx.ajax('GET', '/partials/keys', {target:'#keys-list', swap:'outerHTML'})">Revoke</button>
+        {% endif %}
+        <button class="btn ghost sm" hx-delete="/backend/keys/{{ k.id }}"
+                hx-on::after-request="htmx.ajax('GET', '/partials/keys', {target:'#keys-list', swap:'outerHTML'})"
+                hx-confirm="Delete this key?">Delete</button>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+  <div class="empty-state">
+    <h3>No API keys</h3>
+    <p>Create your first key above to authenticate Home Assistant.</p>
+  </div>
+{% endif %}

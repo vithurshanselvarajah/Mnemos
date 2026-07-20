@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}API Keys · Mnemos{% endblock %}
+{% block content %}
+<div class="row between" style="margin-bottom: 1rem">
+  <h1>API Keys</h1>
+</div>
+
+{% if not is_admin %}
+<div class="op-only-note">
+  <span class="op-only-note__icon" aria-hidden="true"><i class="fa-solid fa-lock"></i></span>
+  <span>You're signed in as an Operator — only Admins can create or manage API keys.</span>
+</div>
+{% endif %}
+
+{% if is_admin %}
+<div class="card" x-data="apiKeys()" x-init="init()">
+  <h3>Create a key</h3>
+  <form @submit.prevent="create($event)" class="row" style="gap:.5rem">
+    <label style="margin:0;flex:1">Name
+      <input name="name" required placeholder="Front-door camera"
+             x-model="form.name" />
+    </label>
+    <label style="margin:0;width:180px">Permission
+      <select name="permission_level" x-model="form.permission_level">
+        <option value="Identify-Only" selected>Identify-Only</option>
+        <option value="Full-Admin">Full-Admin</option>
+      </select>
+    </label>
+    <button type="submit" :disabled="!canCreate || creating">
+      <span x-show="!creating">Create key</span>
+      <span x-show="creating">Creating…</span>
+    </button>
+  </form>
+  <p class="hint">The raw key is shown once after creation — copy it then, you won't see it again.</p>
+
+  <!-- Modal: shown right after creation so the user can copy the raw key. -->
+  <div class="modal-backdrop" x-show="newKey" x-cloak
+       @keydown.escape.window="dismissNewKey()"
+       @click.self="dismissNewKey()">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="newKeyTitle">
+      <header class="modal-head">
+        <h2 id="newKeyTitle">Your new API key</h2>
+        <button class="modal-close" type="button" @click="dismissNewKey()" aria-label="Close">×</button>
+      </header>
+      <div class="modal-body">
+        <p class="muted">Copy this key now — for security, it won't be shown again.</p>
+        <div class="key-reveal">
+          <code x-text="newKey?.raw_key"></code>
+          <button type="button" class="btn primary" @click="copyNewKey()"
+                  :class="{ok: copyState === 'copied'}"
+                  x-text="copyState === 'copied' ? 'Copied!' : (copyState === 'error' ? 'Copy failed' : 'Copy')">
+            Copy
+          </button>
+        </div>
+        <p class="hint">Permission: <strong x-text="newKey?.api_key?.permission_level"></strong></p>
+      </div>
+      <footer class="modal-foot">
+        <button type="button" class="btn ghost" @click="dismissNewKey()">Done</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Inline error display -->
+  <div class="error-banner" x-show="error" x-cloak x-text="error"></div>
+</div>
+{% endif %}
+
+<div class="card" id="keys-list">
+  {% include "partials/keys_list.html" %}
+</div>
+
+{% if is_admin %}
+<script>
+  function apiKeys() {
+    return {
+      form: { name: '', permission_level: 'Identify-Only' },
+      creating: false,
+      newKey: null,         // {api_key, raw_key} from the backend
+      copyState: 'idle',    // 'idle' | 'copied' | 'error'
+      error: '',
+      get canCreate() { return this.form.name.trim().length > 0; },
+      init() { /* nothing to wire; Alpine handles reactivity */ },
+      async create(ev) {
+        ev.preventDefault();
+        if (!this.canCreate || this.creating) return;
+        this.creating = true;
+        this.error = '';
+        try {
+          const r = await fetch('/backend/keys', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: this.form.name.trim(),
+              permission_level: this.form.permission_level,
+            }),
+          });
+          if (!r.ok) {
+            const text = await r.text();
+            this.error = `Failed to create key (${r.status}): ${text || r.statusText}`;
+            return;
+          }
+          const data = await r.json();
+          this.newKey = data;
+          this.copyState = 'idle';
+          this.form.name = '';
+          // Refresh the keys list partial so the new key shows up.
+          htmx.ajax('GET', '/partials/keys', { target: '#keys-list', swap: 'outerHTML' });
+        } catch (e) {
+          this.error = `Network error: ${e.message || e}`;
+        } finally {
+          this.creating = false;
+        }
+      },
+      async copyNewKey() {
+        if (!this.newKey || !this.newKey.raw_key) return;
+        const text = this.newKey.raw_key;
+        try {
+          if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+          } else {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+          }
+          this.copyState = 'copied';
+          setTimeout(() => { if (this.copyState === 'copied') this.copyState = 'idle'; }, 1800);
+        } catch (_) {
+          this.copyState = 'error';
+          setTimeout(() => { if (this.copyState === 'error') this.copyState = 'idle'; }, 2200);
+        }
+      },
+      dismissNewKey() {
+        this.newKey = null;
+        this.copyState = 'idle';
+      },
+    };
+  }
+</script>
+{% endif %}
+{% endblock %}

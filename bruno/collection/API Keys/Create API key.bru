@@ -1,0 +1,45 @@
+meta {
+  name: "Create API key"
+  type: "http"
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/keys
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "CI identify-only",
+    "permission_level": "Identify-Only",
+    "expires_at": null
+  }
+}
+
+docs {
+  Create a new API key. **The raw key is only returned in this response** —
+  it is never stored, only its hash + prefix.
+
+  - **Permission:** Full-Admin.
+  - **Errors:** 400 for invalid `permission_level`.
+  - **Returns:** `{ api_key: { id, name, key_prefix, ... }, raw_key: "..." }`.
+
+  Save the `raw_key` somewhere safe (e.g. a secrets manager). You'll never see
+  it again.
+}
+
+script:post-response {
+  if (res.status === 200 && res.body && res.body.api_key && res.body.api_key.id) {
+    bru.setEnvVar("lastKeyId", res.body.api_key.id);
+  }
+}
+
+settings {
+  encodeUrl: true
+}

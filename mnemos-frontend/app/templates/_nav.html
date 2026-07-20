@@ -1,0 +1,159 @@
+{% if user %}
+<nav class="nav"
+     x-data="{ mobileOpen: false, library: false, admin: false, userMenu: false }"
+     @keydown.escape.window="mobileOpen = false; library = false; admin = false; userMenu = false"
+     @click.outside="mobileOpen = false; library = false; admin = false; userMenu = false">
+  <a class="brand" href="/dashboard">
+    <span class="logo">
+      <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="16" cy="12" r="5" fill="currentColor"/>
+        <path d="M6 26c0-5.5 4.5-10 10-10s10 4.5 10 10" fill="currentColor"/>
+      </svg>
+    </span>
+    Mnemos
+  </a>
+
+  <a class="link top desktop-only" href="/dashboard">Dashboard</a>
+  <a class="link top desktop-only" href="/identify">Identify</a>
+
+  <div class="menu desktop-only">
+    <button class="link menu-trigger" @click="library = !library" :aria-expanded="library">
+      Library
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3.5l3 3 3-3"/></svg>
+    </button>
+    <div class="menu-list" x-show="library" x-transition.opacity x-cloak>
+      <a class="menu-item" href="/inbox">
+        <span class="mi-icon" aria-hidden="true"><i class="fa-solid fa-inbox"></i></span>
+        <span class="mi-text"><strong>Inbox</strong><small>Unknown faces to review</small></span>
+      </a>
+      <a class="menu-item" href="/persons">
+        <span class="mi-icon" aria-hidden="true"><i class="fa-solid fa-user"></i></span>
+        <span class="mi-text"><strong>Persons</strong><small>Known people &amp; vectors</small></span>
+      </a>
+    </div>
+  </div>
+
+  {% if is_admin %}
+  <div class="menu desktop-only">
+    <button class="link menu-trigger" @click="admin = !admin" :aria-expanded="admin">
+      Admin
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3.5l3 3 3-3"/></svg>
+    </button>
+    <div class="menu-list right" x-show="admin" x-transition.opacity x-cloak>
+      <a class="menu-item" href="/models">
+        <span class="mi-icon" aria-hidden="true"><i class="fa-solid fa-brain"></i></span>
+        <span class="mi-text"><strong>Models</strong><small>Detection &amp; re-indexing</small></span>
+      </a>
+      <a class="menu-item" href="/keys">
+        <span class="mi-icon" aria-hidden="true"><i class="fa-solid fa-key"></i></span>
+        <span class="mi-text"><strong>API Keys</strong><small>HA &amp; integrations</small></span>
+      </a>
+      <a class="menu-item" href="/users">
+        <span class="mi-icon" aria-hidden="true"><i class="fa-solid fa-users"></i></span>
+        <span class="mi-text"><strong>Users</strong><small>Operators &amp; admins</small></span>
+      </a>
+      <a class="menu-item" href="/settings">
+        <span class="mi-icon" aria-hidden="true"><i class="fa-solid fa-gear"></i></span>
+        <span class="mi-text"><strong>Settings</strong><small>Backend pairing</small></span>
+      </a>
+      <a class="menu-item" href="/swagger">
+        <span class="mi-icon" aria-hidden="true"><i class="fa-solid fa-file-code"></i></span>
+        <span class="mi-text"><strong>API Explorer</strong><small>Swagger UI / OpenAPI</small></span>
+      </a>
+    </div>
+  </div>
+  {% endif %}
+
+  <span class="grow"></span>
+
+  <a class="pill-link nav-pill" href="/inbox"
+     id="inbox-counter"
+     hx-get="/partials/inbox-count"
+     hx-trigger="load"
+     hx-swap="innerHTML"
+     title="Inbox">
+    <span class="pill"><span class="dot"></span> Inbox 0</span>
+  </a>
+
+  <div class="menu user-menu desktop-only">
+    <button class="link menu-trigger user-trigger" @click="userMenu = !userMenu" :aria-expanded="userMenu">
+      <span class="avatar">{{ user.username[:1] | upper }}</span>
+      <span class="user-name">{{ user.username }} <small>({{ user.role }})</small></span>
+    </button>
+    <div class="menu-list right" x-show="userMenu" x-transition.opacity x-cloak>
+      <div class="menu-header">
+        <strong>{{ user.username }}</strong>
+        <small>{{ user.role }}</small>
+      </div>
+      {% if is_admin %}
+      <a class="menu-item" href="/settings">
+        <span class="mi-icon" aria-hidden="true"><i class="fa-solid fa-gear"></i></span>
+        <span class="mi-text"><strong>Settings</strong><small>Backend &amp; pairing</small></span>
+      </a>
+      {% endif %}
+      <a class="menu-item danger" href="/logout">
+        <span class="mi-icon" aria-hidden="true"><i class="fa-solid fa-right-from-bracket"></i></span>
+        <span class="mi-text"><strong>Logout</strong><small>End this session</small></span>
+      </a>
+    </div>
+  </div>
+  <button class="nav-toggle mobile-only"
+          @click="mobileOpen = !mobileOpen"
+          :aria-expanded="mobileOpen"
+          aria-label="Toggle menu">
+    <svg x-show="!mobileOpen" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+    <svg x-show="mobileOpen" x-cloak width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
+  </button>
+
+  <div class="nav-user mobile-only" title="{{ user.username }} ({{ user.role }})">
+    <span class="avatar">{{ user.username[:1] | upper }}</span>
+  </div>
+
+  <div class="nav-panel" :class="{ open: mobileOpen }">
+    <a class="menu-item" href="/dashboard" @click="mobileOpen = false">
+      <span class="mi-icon" aria-hidden="true"><i class="fa-solid fa-gauge-high"></i></span>
+      <span class="mi-text"><strong>Dashboard</strong><small>System overview</small></span>
+    </a>
+    <a class="menu-item" href="/identify" @click="mobileOpen = false">
+      <span class="mi-icon" aria-hidden="true"><i class="fa-solid fa-magnifying-glass"></i></span>
+      <span class="mi-text"><strong>Identify</strong><small>Recognize a snapshot</small></span>
+    </a>
+    <div class="menu-divider" role="separator"></div>
+    <a class="menu-item" href="/inbox" @click="mobileOpen = false">
+      <span class="mi-icon" aria-hidden="true"><i class="fa-solid fa-inbox"></i></span>
+      <span class="mi-text"><strong>Inbox</strong><small>Unknown faces to review</small></span>
+    </a>
+    <a class="menu-item" href="/persons" @click="mobileOpen = false">
+      <span class="mi-icon" aria-hidden="true"><i class="fa-solid fa-user"></i></span>
+      <span class="mi-text"><strong>Persons</strong><small>Known people &amp; vectors</small></span>
+    </a>
+    {% if is_admin %}
+    <div class="menu-divider" role="separator"></div>
+    <a class="menu-item" href="/models" @click="mobileOpen = false">
+      <span class="mi-icon" aria-hidden="true"><i class="fa-solid fa-brain"></i></span>
+      <span class="mi-text"><strong>Models</strong><small>Detection &amp; re-indexing</small></span>
+    </a>
+    <a class="menu-item" href="/keys" @click="mobileOpen = false">
+      <span class="mi-icon" aria-hidden="true"><i class="fa-solid fa-key"></i></span>
+      <span class="mi-text"><strong>API Keys</strong><small>HA &amp; integrations</small></span>
+    </a>
+    <a class="menu-item" href="/users" @click="mobileOpen = false">
+      <span class="mi-icon" aria-hidden="true"><i class="fa-solid fa-users"></i></span>
+      <span class="mi-text"><strong>Users</strong><small>Operators &amp; admins</small></span>
+    </a>
+    <a class="menu-item" href="/settings" @click="mobileOpen = false">
+      <span class="mi-icon" aria-hidden="true"><i class="fa-solid fa-gear"></i></span>
+      <span class="mi-text"><strong>Settings</strong><small>Backend pairing</small></span>
+    </a>
+    <a class="menu-item" href="/swagger" @click="mobileOpen = false">
+      <span class="mi-icon" aria-hidden="true"><i class="fa-solid fa-file-code"></i></span>
+      <span class="mi-text"><strong>API Explorer</strong><small>Swagger UI / OpenAPI</small></span>
+    </a>
+    {% endif %}
+    <a class="menu-item danger" href="/logout" @click="mobileOpen = false">
+      <span class="mi-icon" aria-hidden="true"><i class="fa-solid fa-right-from-bracket"></i></span>
+      <span class="mi-text"><strong>Logout</strong><small>End this session</small></span>
+    </a>
+  </div>
+</nav>
+{% endif %}

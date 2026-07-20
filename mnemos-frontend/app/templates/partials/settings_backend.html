@@ -1,0 +1,9 @@
+{% if node %}
+  <p><span class="status ok">Paired</span></p>
+  <p>URL: <code>{{ node.base_url }}</code></p>
+  <p>Key prefix: <code>{{ node.api_key[:8] }}…</code></p>
+{% else %}
+  <p><span class="status error">Not paired</span></p>
+  <p class="muted">Run <code>bin/mnemos delete data</code> and re-onboard to pair with a new backend.</p>
+{% endif %}
+<p class="hint" style="margin-top: .75rem">Mnemos uses an <code>X-API-Key</code> header to authenticate REST calls. Rotate via the API Keys page.</p>

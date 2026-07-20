@@ -1,0 +1,23 @@
+meta {
+  name: "List persons"
+  type: "http"
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/persons
+  body: none
+  auth: none
+}
+
+docs {
+  List all persons, alphabetical by name. Each entry includes `sample_count`,
+  a `thumbnail_url` for the best crop, and `best_det_score`.
+
+  Returns: `[{ id, name, custom_threshold, sample_count, thumbnail_url,
+  best_det_score, created_at, updated_at }, ...]`.
+}
+
+settings {
+  encodeUrl: true
+}

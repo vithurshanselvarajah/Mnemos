@@ -1,0 +1,40 @@
+meta {
+  name: "Assign crops to NEW person"
+  type: "http"
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/faces/assign
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "crop_ids": [
+      "REPLACE_WITH_CROP_UUID_1"
+    ],
+    "new_person_name": "New Person Name"
+  }
+}
+
+docs {
+  Variant of **Assign crops to person** that creates a brand-new person with
+  the given name. Name uniqueness is case-insensitive; if the name already
+  exists, this returns 409.
+}
+
+script:post-response {
+  if (res.status === 200 && res.body && res.body.person_id) {
+    bru.setEnvVar("lastPersonId", res.body.person_id);
+  }
+}
+
+settings {
+  encodeUrl: true
+}

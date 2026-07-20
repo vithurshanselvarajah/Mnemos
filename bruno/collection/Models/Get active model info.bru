@@ -1,0 +1,22 @@
+meta {
+  name: "Get active model info"
+  type: "http"
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/models
+  body: none
+  auth: none
+}
+
+docs {
+  Current model info + reindex progress snapshot.
+
+  Returns: `{ name, embedding_dim, det_size, reindex_in_progress,
+  reindex_total, reindex_done }`.
+}
+
+settings {
+  encodeUrl: true
+}

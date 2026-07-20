@@ -1,0 +1,62 @@
+{% if persons %}
+<table class="persons-table">
+  <thead>
+    <tr>
+      <th></th>
+      <th>Name</th>
+      <th>Custom threshold</th>
+      <th>Samples</th>
+      {% if is_admin %}<th class="persons-actions"></th>{% endif %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for p in persons %}
+    <tr>
+      <td class="persons-thumb">
+        {% if p.thumbnail_url %}
+          {% set thumb_name = p.thumbnail_url.split('/')[-1] %}
+          <a href="/persons/{{ p.id }}" title="View {{ p.name }}'s photos">
+            <img src="/backend/crops/{{ thumb_name }}" alt="{{ p.name }}" loading="lazy" />
+            <span class="persons-thumb-score">{{ '%.0f%%'|format((p.best_det_score or 0) * 100) }}</span>
+          </a>
+        {% else %}
+          <a class="persons-thumb-empty" href="/persons/{{ p.id }}" title="No assigned photos yet">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7"/></svg>
+          </a>
+        {% endif %}
+      </td>
+      <td><strong>{{ p.name }}</strong></td>
+      <td>{{ '%.2f'|format(p.custom_threshold) if p.custom_threshold is not none else '—' }}</td>
+      <td>{{ p.sample_count }}</td>
+      {% if is_admin %}
+      <td class="persons-actions">
+        <form hx-patch="/backend/persons/{{ p.id }}"
+              hx-ext="json-enc"
+              hx-on::after-request="if(event.detail.successful){htmx.ajax('GET', '/partials/persons', {target:'#persons-list', swap:'outerHTML'})}else{alert('Update failed: ' + (event.detail.xhr.responseText || event.detail.xhr.status))}"
+              hx-trigger="submit"
+              class="persons-edit-form">
+          <input name="name" value="{{ p.name }}" required />
+          <input name="custom_threshold" type="number" min="0" max="1" step="0.01"
+                 value="{{ p.custom_threshold if p.custom_threshold is not none else '' }}"
+                 placeholder="threshold" />
+          <button class="btn sm">Save</button>
+        </form>
+        <div class="persons-edit-actions">
+          <a class="btn ghost sm" href="/persons/{{ p.id }}">Photos</a>
+          <button class="btn ghost sm danger"
+                  hx-delete="/backend/persons/{{ p.id }}"
+                  hx-on::after-request="if(event.detail.successful){htmx.ajax('GET', '/partials/persons', {target:'#persons-list', swap:'outerHTML'})}"
+                  hx-confirm="Delete {{ p.name }}? Assigned crops return to the inbox.">Delete</button>
+        </div>
+      </td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+  <div class="empty-state">
+    <h3>No persons yet</h3>
+    <p>Add the first person above; once you assign crops, the averaged vector is built automatically.</p>
+  </div>
+{% endif %}

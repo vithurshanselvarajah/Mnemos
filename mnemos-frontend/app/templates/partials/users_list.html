@@ -1,0 +1,26 @@
+<div id="users-list">
+{% if users %}
+<table>
+  <thead>
+    <tr><th>Username</th><th>Role</th><th>Created</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for u in users %}
+    <tr>
+      <td><strong>{{ u.username }}</strong></td>
+      <td><span class="status {{ 'ok' if u.role == 'Admin' else 'info' }}">{{ u.role }}</span></td>
+      <td class="muted"><small>{{ u.created_at }}</small></td>
+      <td style="text-align:right">
+        <button class="btn ghost sm" hx-delete="/partials/users/{{ u.id }}" hx-target="#users-list" hx-swap="outerHTML" hx-confirm="Delete user {{ u.username }}?">Delete</button>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+  <div class="empty-state">
+    <h3>No users yet</h3>
+    <p>Add the first user above.</p>
+  </div>
+{% endif %}
+</div>

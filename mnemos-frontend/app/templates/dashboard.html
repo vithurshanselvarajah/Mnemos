@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · Mnemos{% endblock %}
+{% block content %}
+<div class="row between" style="margin-bottom: 1rem">
+  <div>
+    <h1>Welcome back, {{ user.username }} <i class="fa-solid fa-hand-sparkles" aria-hidden="true"></i></h1>
+    <p class="muted">A quick look at the system.</p>
+  </div>
+  <div class="row">
+    <a class="btn" href="/identify">Run an identify</a>
+    <a class="btn ghost" href="/inbox">Open inbox</a>
+  </div>
+</div>
+
+<div class="grid cols-3">
+  <div class="card">
+    <h3>Backend</h3>
+    {% if backend_ok %}
+      <span class="status ok">Reachable</span>
+    {% else %}
+      <span class="status error">Unreachable</span>
+    {% endif %}
+    <p class="hint" style="margin-top: .5rem">Model: <code>{{ backend_payload.get('model','—') }}</code></p>
+    {% if backend_payload.get('reindex_in_progress') %}
+      <p class="muted">Re-indexing {{ backend_payload.get('reindex_done', 0) }} / {{ backend_payload.get('reindex_total', 0) }}</p>
+    {% endif %}
+  </div>
+  <div class="card">
+    <h3>Inbox</h3>
+    <p>Review the unknown faces that the engine detected. Assign them to a person, mark as non-face, or ignore.</p>
+    <a class="btn ghost" href="/inbox">Open inbox →</a>
+  </div>
+  <div class="card">
+    <h3>Persons</h3>
+    <p>Manage known people and the per-person averaged vector used for matching.</p>
+    <a class="btn ghost" href="/persons">Manage persons →</a>
+  </div>
+  {% if is_admin %}
+  <div class="card">
+    <h3>Model</h3>
+    <p>Switch the active detection model. Re-indexing runs in the background.</p>
+    <a class="btn ghost" href="/models">Manage model →</a>
+  </div>
+  <div class="card">
+    <h3>API Keys</h3>
+    <p>Provision Identify-Only and Full-Admin API keys for Home Assistant and integrations.</p>
+    <a class="btn ghost" href="/keys">Manage keys →</a>
+  </div>
+  <div class="card">
+    <h3>Users</h3>
+    <p>Add Operators and Admins. Sessions are cookie-based and short-lived.</p>
+    <a class="btn ghost" href="/users">Manage users →</a>
+  </div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h3>Health snapshot</h3>
+  <pre><code>{{ backend_payload | tojson(indent=2) }}</code></pre>
+</div>
+{% endblock %}

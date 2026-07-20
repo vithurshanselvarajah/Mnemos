@@ -1,0 +1,29 @@
+meta {
+  name: "Identify image (upload)"
+  type: "http"
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/v1/identify
+  body: multipartForm
+  auth: none
+}
+
+body:multipart-form {
+  file: @file(/home/vithusel/Pictures/Screenshots/Screenshot From 2026-07-18 13-32-38.png)
+}
+
+docs {
+  Primary intake endpoint. Uploads an image (JPEG/PNG/WebP) and runs InsightFace
+  detection. Each face is matched against the pgvector store. **Unknown** faces
+  are persisted as `UNASSIGNED` crops in the inbox.
+
+  - **Dedupes** within-request (NMS) and cross-request (image SHA + 98% cosine similarity).
+  - **Side effect:** publishes WebSocket event `inbox.new_face` for each new unknown.
+  - **Permission:** any API key (Identify-Only is fine).
+}
+
+settings {
+  encodeUrl: true
+}

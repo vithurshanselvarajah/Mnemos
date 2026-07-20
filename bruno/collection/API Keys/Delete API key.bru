@@ -1,0 +1,23 @@
+meta {
+  name: "Delete API key"
+  type: "http"
+  seq: 4
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/keys/{{lastKeyId}}
+  body: none
+  auth: none
+}
+
+docs {
+  Permanently delete an API key row. After this, the key is **gone** — you
+  can't tell it ever existed.
+
+  - **Permission:** Full-Admin.
+  - **Returns:** `{ ok: true }`.
+}
+
+settings {
+  encodeUrl: true
+}

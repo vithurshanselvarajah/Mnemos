@@ -1,0 +1,93 @@
+services:
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL with pgvector extension
+  # ---------------------------------------------------------------------------
+  mnemos-vector-db:
+    image: pgvector/pgvector:pg18
+    container_name: mnemos-vector-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mnemos_vectors
+      POSTGRES_USER: mnemos
+      POSTGRES_PASSWORD: mnemos-pgvector-changeme
+    volumes:
+      - pgvector_data:/var/lib/postgresql
+      - ./pgvector-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mnemos -d mnemos_vectors"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5432:5432"
+
+  # ---------------------------------------------------------------------------
+  # Mnemos backend (Headless API + InsightFace CPU + crop storage)
+  # ---------------------------------------------------------------------------
+  mnemos-backend:
+    build:
+      context: ./mnemos-backend
+      dockerfile: Dockerfile
+    container_name: mnemos-backend
+    restart: unless-stopped
+    depends_on:
+      mnemos-vector-db:
+        condition: service_healthy
+    environment:
+      MNEMOS_DB_PATH: /data/backend.db
+      MNEMOS_CROPS_DIR: /data/crops
+      MNEMOS_VECTOR_DSN: postgresql://mnemos:mnemos-pgvector-changeme@mnemos-vector-db:5432/mnemos_vectors
+      MNEMOS_DEFAULT_MODEL: buffalo_s
+      MNEMOS_DET_SIZE: 640
+      MNEMOS_MIN_FACE_PX: 30
+      MNEMOS_DEFAULT_THRESHOLD: 0.40
+      MNEMOS_API_HOST: 0.0.0.0
+      MNEMOS_API_PORT: 8000
+      MNEMOS_CORS_ORIGINS: http://mnemos-frontend:8080,http://localhost:8080
+    volumes:
+      - backend_data:/data
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3).status == 200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  # ---------------------------------------------------------------------------
+  # Mnemos frontend (Server-rendered management UI)
+  # ---------------------------------------------------------------------------
+  mnemos-frontend:
+    build:
+      context: ./mnemos-frontend
+      dockerfile: Dockerfile
+    container_name: mnemos-frontend
+    restart: unless-stopped
+    depends_on:
+      mnemos-backend:
+        condition: service_healthy
+    environment:
+      MNEMOS_FE_DB_PATH: /data/frontend.db
+      MNEMOS_FE_SESSION_HOURS: 8
+      MNEMOS_FE_REMEMBER_DAYS: 30
+      MNEMOS_FE_DEFAULT_BACKEND_URL: http://mnemos-backend:8000
+      MNEMOS_FE_LISTEN_HOST: 0.0.0.0
+      MNEMOS_FE_LISTEN_PORT: 8080
+      MNEMOS_FE_SECRET: change-me-please-rotate-on-first-run-32bytes
+    volumes:
+      - frontend_data:/data
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys,os; r=urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3); sys.exit(0 if r.status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  pgvector_data:
+  backend_data:
+  frontend_data:

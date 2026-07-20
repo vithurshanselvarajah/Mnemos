@@ -1,0 +1,21 @@
+meta {
+  name: "Health check"
+  type: "http"
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/healthz
+  body: none
+  auth: none
+}
+
+docs {
+  Liveness + readiness probe. No auth required.
+
+  Returns backend status, current model, DB connectivity, vector DB connectivity, and reindex progress.
+}
+
+settings {
+  encodeUrl: true
+}

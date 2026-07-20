@@ -1,0 +1,24 @@
+meta {
+  name: "Delete person"
+  type: "http"
+  seq: 5
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/persons/{{lastPersonId}}
+  body: none
+  auth: none
+}
+
+docs {
+  Delete a person. Unlinks all of their crops (`status=UNASSIGNED`,
+  `person_id=NULL`) and removes their averaged vectors from pgvector for both
+  `buffalo_s` and `buffalo_l`.
+
+  - **Permission:** Full-Admin.
+  - **Returns:** `{ ok: true }`.
+}
+
+settings {
+  encodeUrl: true
+}

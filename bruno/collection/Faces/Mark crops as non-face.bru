@@ -1,0 +1,37 @@
+meta {
+  name: "Mark crops as non-face"
+  type: "http"
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/v1/faces/mark-non-face
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "crop_ids": [
+      "REPLACE_WITH_CROP_UUID_1"
+    ]
+  }
+}
+
+docs {
+  Mark crops as `NON_FACE` (rejected detection). Removes any pgvector row for
+  them. The crops will no longer appear in the inbox.
+
+  - **Permission:** Full-Admin.
+  - **Side effect:** publishes WebSocket `inbox.bulk_changed`.
+
+  Returns: `{ ok, count }`.
+}
+
+settings {
+  encodeUrl: true
+}

@@ -1,0 +1,33 @@
+meta {
+  name: "Mnemos V2 API"
+  type: "collection"
+  version: "1.0.0"
+}
+
+docs {
+  # Mnemos V2 Backend API
+
+  A Bruno collection for the Mnemos V2 FastAPI backend.
+
+  ## Setup
+  1. Select the **Local** environment (top-right in Bruno).
+  2. Edit the environment and replace the placeholder values:
+     - `baseUrl` — where the backend is reachable. Default: `http://localhost:8000`
+     - `apiKey` — a **Full-Admin** API key (get one by POSTing `/api/v1/system/pair` with the backend's master key first).
+     - `masterKey` — the backend's master key (printed in the backend container logs on first boot, or fetched via `GET /api/v1/system/master`).
+  3. Pick a request and hit **Send**.
+
+  ## Notes
+  - The `X-API-Key` header is set automatically by the collection-level `req` script below.
+  - `Identify-Only` keys can call `/healthz`, `/api/v1/identify`, `/api/v1/faces/unassigned`, `/api/v1/persons`, `/api/v1/crops/*`, and `/api/v1/models` (read-only). Everything else requires a **Full-Admin** key.
+  - `/healthz`, `/docs`, `/openapi.json`, `/redoc` and `/ws/*` are exempt from auth.
+  - WebSocket endpoint (`/ws/events`) is a real-time event channel; Bruno does not natively exercise it, but the FastAPI Swagger UI at `/docs` does.
+}
+
+script:pre-request {
+  // Attach the X-API-Key header to every request that has an env var set.
+  const key = bru.getEnvVar("apiKey");
+  if (key && !key.startsWith("REPLACE_WITH")) {
+    req.setHeader("X-API-Key", key);
+  }
+}

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Settings · Mnemos{% endblock %}
+{% block content %}
+<div class="row between" style="margin-bottom: 1rem">
+  <h1>Settings</h1>
+</div>
+
+<div class="card">
+  <h3>Backend connection</h3>
+  <div hx-get="/partials/settings/backend" hx-trigger="load" hx-swap="outerHTML">
+    <p class="muted">Loading…</p>
+  </div>
+  <p class="hint" style="margin-top: .75rem">To re-pair with a different backend URL or rotate the master key, use <code>bin/mnemos delete data</code> and re-run the onboarding wizard.</p>
+</div>
+{% endblock %}

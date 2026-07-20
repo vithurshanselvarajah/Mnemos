@@ -1,0 +1,55 @@
+# Mnemos V2 ruff configuration.
+#
+# We use a permissive default: rules that catch real bugs are
+# enforced, everything else is a warning. The test suite runs
+# against a curated set of paths; generated and vendored files
+# are excluded.
+
+target-version = "py314"
+line-length = 110
+
+[lint]
+# A practical default: leave a lot to author discretion but
+# catch obvious bugs and bad patterns.
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "B",      # bugbear
+    "UP",     # pyupgrade
+    "SIM",    # flake8-simplify
+    "C4",     # flake8-comprehensions
+    "PIE",    # flake8-pie
+    "RET",    # flake8-return
+    "PGH",    # pygrep-hooks
+    "RUF",    # ruff-specific
+]
+ignore = [
+    "E501",   # line length is handled by formatter
+    "B008",   # function call in default argument (FastAPI uses this a lot)
+    "B904",   # raise from (we don't always chain)
+    "SIM102", # nested ifs are sometimes clearer
+    "SIM108", # ternary vs if-else is style
+    "RET504", # unnecessary assignment before return
+    "PGH003", # type hint usage
+    "RUF012", # mutable class attributes (SQLModel uses them)
+]
+
+[lint.per-file-ignores]
+# Tests can be a bit looser than production code.
+"tests/*" = ["E402", "B011", "SIM117", "SIM105"]
+# CLI entry point: imports happen at runtime.
+"*/cli.py" = ["E402"]
+
+[format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+[lint.isort]
+known-first-party = ["app"]
+combine-as-imports = true
+
+[lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query"]

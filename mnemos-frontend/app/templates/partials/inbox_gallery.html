@@ -1,0 +1,34 @@
+{% if page['items'] %}
+  <div class="inbox-grid">
+  {% for it in page['items'] %}
+    <label class="crop" data-crop-id="{{ it.id }}">
+      <input type="checkbox" class="crop-select" data-crop="{{ it.id }}" />
+      <img src="{{ it.image_url }}" alt="Unknown face" loading="lazy" />
+      <div class="meta">
+        <span>score {{ '%.2f'|format(it.det_score) }}</span>
+        <span class="status idle">unassigned</span>
+      </div>
+    </label>
+  {% endfor %}
+  </div>
+  <div class="gallery-footer">
+    <span class="muted">{{ page['total'] }} total</span>
+    <button class="btn ghost sm"
+            hx-get="/partials/inbox?page={{ page['page'] - 1 }}&page_size={{ page['page_size'] }}"
+            hx-target="#inbox-gallery" hx-swap="outerHTML"
+            {% if page['page'] <= 1 %}disabled{% endif %}>← Prev</button>
+    <span class="muted">page {{ page['page'] }}</span>
+    <button class="btn ghost sm"
+            hx-get="/partials/inbox?page={{ page['page'] + 1 }}&page_size={{ page['page_size'] }}"
+            hx-target="#inbox-gallery" hx-swap="outerHTML"
+            {% if page['page'] * page['page_size'] >= page['total'] %}disabled{% endif %}>Next →</button>
+  </div>
+{% else %}
+  <div class="empty-state">
+    <div class="icon">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+    </div>
+    <h3>Inbox is empty</h3>
+    <p>No unknown faces are waiting for review. Nice work.</p>
+  </div>
+{% endif %}

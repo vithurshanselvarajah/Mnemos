@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}{{ person.name }} · Mnemos{% endblock %}
+{% block content %}
+<div class="row between" style="margin-bottom: 1rem">
+  <div>
+    <p class="muted" style="margin: 0 0 .25rem"><a href="/persons"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> All persons</a></p>
+    <h1 style="margin: 0">{{ person.name }}</h1>
+    <p class="muted" style="margin: .25rem 0 0">
+      {{ crops|length }} assigned photo{{ '' if crops|length == 1 else 's' }}
+      {% if person.custom_threshold %} · threshold {{ '%.2f'|format(person.custom_threshold) }}{% endif %}
+    </p>
+  </div>
+  {% if is_admin %}
+  <div class="row" style="gap:.5rem">
+    <button class="btn danger sm"
+            hx-delete="/backend/persons/{{ person.id }}"
+            hx-confirm="Delete '{{ person.name|e }}' and unassign all their photos? This cannot be undone."
+            hx-on::after-request="window.location.href = '/persons'">
+      Delete person
+    </button>
+  </div>
+  {% endif %}
+</div>
+
+<div class="person-detail">
+  <div class="card">
+    <h3 style="margin:0 0 .5rem">Photos</h3>
+    {% if crops %}
+    <div class="photo-grid">
+      {% for c in crops %}
+      <div class="photo" id="photo-{{ c.id }}">
+        <img src="{{ c.image_url }}" alt="Face of {{ person.name }}" loading="lazy" />
+        <div class="photo-meta">
+          <span>{{ '%.0f%%'|format((c.det_score or 0) * 100) }}</span>
+          <span class="muted" style="font-size:.85em">{{ c.created_at[:10] if c.created_at else '' }}</span>
+        </div>
+        {% if is_admin %}
+        <button class="photo-delete"
+                hx-delete="/backend/persons/{{ person.id }}/crops/{{ c.id }}"
+                hx-confirm="Remove this photo from {{ person.name|e }}?"
+                hx-target="#photo-{{ c.id }}"
+                hx-swap="outerHTML swap:200ms"
+                title="Delete this photo">
+          Remove
+        </button>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <h3>No photos yet</h3>
+      <p class="muted">Assign some faces from the <a href="/inbox">inbox</a> to build up this person's gallery.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

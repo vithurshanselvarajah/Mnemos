@@ -1,0 +1,46 @@
+meta {
+  name: "Pair (bootstrap)"
+  type: "http"
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/system/pair
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "master_key": "{{masterKey}}",
+    "name": "Bruno"
+  }
+}
+
+docs {
+  Exchange the **master key** for a fresh **Full-Admin** API key. This is the bootstrap
+  endpoint — no auth header is required, just the master key in the body.
+
+  Use this once to get your first API key, then save it into the `apiKey` env var.
+  After that, all other admin calls use `X-API-Key`.
+
+  The `master_key` env var must be set to the value from your backend container's
+  startup logs (or retrieved via `GET /api/v1/system/master` if you already have
+  a Full-Admin key).
+}
+
+script:post-response {
+  // If pairing succeeded, the response has `raw_key`. Save it into the
+  // apiKey env var so subsequent requests can use it.
+  if (res.status === 200 && res.body && res.body.raw_key) {
+    bru.setEnvVar("apiKey", res.body.raw_key);
+  }
+}
+
+settings {
+  encodeUrl: true
+}

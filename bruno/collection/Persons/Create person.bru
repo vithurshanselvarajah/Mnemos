@@ -1,0 +1,41 @@
+meta {
+  name: "Create person"
+  type: "http"
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/persons
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Alice",
+    "custom_threshold": null
+  }
+}
+
+docs {
+  Create a new person. Name uniqueness is case-insensitive. Setting
+  `custom_threshold` overrides the global match threshold for this person
+  (range 0.0–1.0; lower = stricter, higher = looser).
+
+  - **Permission:** Full-Admin.
+  - **Errors:** 400 on empty name, 409 on duplicate name.
+}
+
+script:post-response {
+  if (res.status === 200 && res.body && res.body.id) {
+    bru.setEnvVar("lastPersonId", res.body.id);
+  }
+}
+
+settings {
+  encodeUrl: true
+}

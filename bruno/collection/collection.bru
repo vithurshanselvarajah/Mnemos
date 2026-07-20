@@ -1,0 +1,6 @@
+script:pre-request {
+    const key = bru.getEnvVar("apiKey");
+    if (key && !key.startsWith("REPLACE_WITH")) {
+      req.setHeader("X-API-Key", key);
+    }
+}

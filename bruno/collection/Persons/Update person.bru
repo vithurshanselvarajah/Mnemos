@@ -1,0 +1,33 @@
+meta {
+  name: "Update person"
+  type: "http"
+  seq: 4
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/persons/{{lastPersonId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Alice (renamed)",
+    "custom_threshold": 0.42
+  }
+}
+
+docs {
+  Update a person's `name` and/or `custom_threshold`. Empty `name` is rejected;
+  duplicate (case-insensitive) names against other persons are rejected (409).
+
+  - **Permission:** Full-Admin.
+}
+
+settings {
+  encodeUrl: true
+}

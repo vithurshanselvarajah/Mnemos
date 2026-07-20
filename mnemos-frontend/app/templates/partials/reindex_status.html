@@ -1,0 +1,8 @@
+{% if info.reindex_in_progress %}
+  <span class="status warn">Re-indexing</span>
+  <p class="muted">{{ info.reindex_done }} / {{ info.reindex_total }} crops (model <code>{{ info.name }}</code>)</p>
+  <div class="progress" style="margin-top:.5rem"><div class="bar" style="width: {{ (100 * info.reindex_done / (info.reindex_total or 1)) | int }}%"></div></div>
+{% else %}
+  <span class="status ok">Active</span>
+  <p class="muted" style="margin:.25rem 0 0">Model <code>{{ info.name }}</code> · {{ info.embedding_dim }}-d embeddings · det {{ info.det_size }}</p>
+{% endif %}

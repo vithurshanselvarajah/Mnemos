@@ -1,0 +1,39 @@
+meta {
+  name: "Switch model"
+  type: "http"
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/models/switch
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "buffalo_l"
+  }
+}
+
+docs {
+  Switch the active InsightFace model and kick off a background reindex of
+  all `ASSIGNED` crops into the new model's embedding space. While the
+  reindex is running, identify still uses the old model; on completion the
+  new model is hot-swapped in.
+
+  Supported values: `buffalo_s` (faster, 512-dim) or `buffalo_l` (slower,
+  512-dim, more accurate).
+
+  - **Permission:** Full-Admin.
+  - **Errors:** 400 on missing/unsupported name; 409 if a reindex is already
+    running.
+}
+
+settings {
+  encodeUrl: true
+}

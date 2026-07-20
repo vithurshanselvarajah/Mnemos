@@ -1,0 +1,22 @@
+meta {
+  name: "Revoke API key"
+  type: "http"
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/keys/{{lastKeyId}}/revoke
+  body: none
+  auth: none
+}
+
+docs {
+  Mark a key as revoked (sets `revoked_at = utcnow`). Revoked keys fail auth.
+
+  - **Permission:** Full-Admin.
+  - **Returns:** `ApiKeyOut` (with `revoked_at` populated).
+}
+
+settings {
+  encodeUrl: true
+}

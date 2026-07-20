@@ -1,0 +1,13 @@
+Note: this file is no longer the source of truth for the project
+version. Each service has its own version stamp baked into source
+control:
+
+  - mnemos-backend/app/_version.py   (backend version)
+  - mnemos-frontend/app/_version.py  (frontend version)
+
+To bump a version, edit the `__version__` string in the relevant
+file and rebuild the image. Run `bin/mnemos version` to see the
+current values.
+
+This file is kept so older tooling that referenced it still
+finds something; it is otherwise unused.

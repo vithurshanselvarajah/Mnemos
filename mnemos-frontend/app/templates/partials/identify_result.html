@@ -1,0 +1,149 @@
+{# Rendered as the body of the identify result card. #}
+{% if error %}
+  <div class="empty-state">
+    <h3>Backend error</h3>
+    <p class="muted">{{ error }}</p>
+  </div>
+{% else %}
+  <div class="row between" style="margin-bottom: 1rem">
+    <h3 style="margin:0">Result</h3>
+    <span class="muted">
+      {{ (result['unknown_count'] or 0) + (result['recognized']|length or 0) }} face(s) found
+      {% if result['duplicates_skipped'] %}
+        · {{ result['duplicates_skipped'] }} duplicate(s) skipped
+      {% endif %}
+    </span>
+  </div>
+
+  {% if result['recognized'] %}
+  <div class="card narrow" style="margin: 0 0 1rem 0">
+    <h3 style="margin:0 0 .5rem">Recognized</h3>
+    <div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .75rem">
+      {% for r in result['recognized'] %}
+      <div class="card" style="margin:0; padding: .75rem">
+        <div class="row between">
+          <strong>{{ r.name }}</strong>
+          <span class="status ok">{{ '%.0f%%'|format((r.confidence or 0) * 100) }}</span>
+        </div>
+        {% if r.image_url %}
+        <img src="{{ r.image_url }}" alt="{{ r.name }}" style="width:100%; border-radius: 8px; margin-top: .5rem" loading="lazy" />
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if result['unknown_faces'] %}
+    {% if is_admin %}
+    <form id="identify-bulk-form"
+          hx-swap="none"
+          x-data="bulkAssign()"
+          data-suggest-list='{{ persons|tojson }}'>
+      <div class="bulk-bar bulk-bar--identify">
+        <div class="bulk-summary">
+          <span class="bulk-summary-count" x-text="selectedCount">0</span>
+          <span class="bulk-summary-suffix">face(s) selected</span>
+          <span class="bulk-summary-hint" x-show="selectedCount === 0">— tick the faces below</span>
+        </div>
+
+        <div class="bulk-toolbar">
+          <label class="bulk-field bulk-field--name" style="flex:1; min-width: 220px">
+            <span>Assign to</span>
+            <span class="suggest-wrap"
+                  x-data="nameSuggest()"
+                  x-init="$nextTick(() => init()); $watch('value', v => nameInput = v); $watch('value', () => renderList())"
+                  data-suggest-list='{{ persons|tojson }}'>
+              <input name="name_input"
+                     type="text"
+                     autocomplete="new-password"
+                     autocorrect="off"
+                     autocapitalize="off"
+                     spellcheck="false"
+                     data-form-type="other"
+                     data-lpignore="true"
+                     data-1p-ignore="true"
+                     role="combobox"
+                     aria-autocomplete="list"
+                     :aria-expanded="open"
+                     :value="value"
+                     @input="onInput($event)"
+                     @focus="onFocus()"
+                     @blur="onBlur()"
+                     @keydown="onKey($event)"
+                     placeholder="Type a name to search…" />
+              <ul class="suggest-list" x-cloak></ul>
+            </span>
+            <span class="bulk-field-hint"
+                  x-show="nameInput.trim().length > 0"
+                  x-cloak>
+              <span class="hint-existing" x-show="matchedPerson">
+                → existing: <strong x-text="matchedPerson && matchedPerson.name"></strong>
+              </span>
+              <span class="hint-new" x-show="!matchedPerson">
+                + new person will be created
+              </span>
+            </span>
+          </label>
+
+          <button type="submit" class="btn primary bulk-submit"
+                  hx-post="/backend/faces/assign"
+                  hx-disabled-elt="this"
+                  :disabled="!canSubmit"
+                  x-text="submitLabel">Assign</button>
+
+          <div class="bulk-secondary">
+            <button type="button" class="btn ghost sm"
+                    hx-post="/backend/faces/mark-non-face"
+                    hx-include="#identify-bulk-form"
+                    hx-swap="none"
+                    :disabled="selectedCount === 0"
+                    hx-disabled-elt="this">
+              Mark non-face
+            </button>
+            <button type="button" class="btn ghost sm"
+                    hx-post="/backend/faces/ignore"
+                    hx-include="#identify-bulk-form"
+                    hx-swap="none"
+                    :disabled="selectedCount === 0"
+                    hx-disabled-elt="this">
+              Ignore
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <input type="hidden" name="crop_ids_json" :value="cropIdsJson" />
+    </form>
+    {% endif %}
+
+    <div class="card narrow" style="margin-top:.5rem"
+         id="identify-unknown-card">
+      <h3 style="margin:0 0 .5rem">Unknown (<span>{{ result['unknown_count'] }}</span>)</h3>
+      <div class="inbox-grid">
+        {% for u in result['unknown_faces'] %}
+        <label class="crop" data-crop-id="{{ u.crop_id }}">
+          {% if is_admin %}
+          <input type="checkbox" class="crop-select" data-crop="{{ u.crop_id }}" />
+          {% endif %}
+          <img src="{{ u.image_url }}" alt="Unknown face" loading="lazy" />
+          <div class="meta">
+            <span>score {{ '%.2f'|format(u.det_score) }}</span>
+            <span class="status idle">unassigned</span>
+          </div>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+    <p class="hint" style="margin-top:.5rem">
+      Unknown faces also land in the <a href="/inbox">inbox</a> for bulk review.
+    </p>
+  {% endif %}
+
+  {% if (result['unknown_count'] or 0) == 0 and (result['recognized']|length or 0) == 0 %}
+  <div class="empty-state">
+    <h3>No faces detected</h3>
+    <p class="muted">The model didn't find any faces in that image.</p>
+  </div>
+  {% endif %}
+{% endif %}

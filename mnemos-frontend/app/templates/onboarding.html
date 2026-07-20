@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}Setup · Mnemos{% endblock %}
+
+{% block body %}
+<div class="auth-shell">
+  <aside class="brand-panel">
+    <div class="wordmark">
+      <span class="logo">
+        <svg width="20" height="20" viewBox="0 0 32 32" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="16" cy="12" r="5"/>
+          <path d="M6 26c0-5.5 4.5-10 10-10s10 4.5 10 10"/>
+        </svg>
+      </span>
+      Mnemos
+    </div>
+    <div>
+      <h2>Set up Mnemos in two short steps.</h2>
+      <p class="lede">Create the first admin, then pair the frontend with the backend using the master key printed by the backend CLI.</p>
+      <div class="features">
+        <div class="feature">
+          <span class="check">1</span>
+          <div><strong>Create an admin.</strong> The first user gets full access.</div>
+        </div>
+        <div class="feature">
+          <span class="check">2</span>
+          <div><strong>Pair the backend.</strong> The master key is shown only to the operator.</div>
+        </div>
+      </div>
+    </div>
+    <div class="footer">Self-hosted · Private · Yours</div>
+  </aside>
+
+  <section class="form-panel">
+    <div class="card">
+      <h1>Setup</h1>
+      <div class="steps">
+        <div class="step {{ 'done' if step in ('backend','done') else ('active' if step == 'admin' else 'pending') }}">
+          <span class="num">1</span>
+          <div><strong>Create admin user</strong><div class="hint">Username + password.</div></div>
+        </div>
+        <div class="step {{ 'done' if step == 'done' else ('active' if step == 'backend' else 'pending') }}">
+          <span class="num">2</span>
+          <div><strong>Pair with backend</strong><div class="hint">Backend URL + master key.</div></div>
+        </div>
+      </div>
+
+      {% if step == "admin" %}
+        <form method="post" action="/onboarding/admin">
+          <label>Username
+            <input name="username" autofocus required autocomplete="username" />
+          </label>
+          <label>Password (at least 8 characters)
+            <input name="password" type="password" required minlength="8" autocomplete="new-password" />
+          </label>
+          <label>Confirm password
+            <input name="password_confirm" type="password" required minlength="8" autocomplete="new-password" />
+          </label>
+          <div class="row" style="margin-top: 1rem">
+            <button type="submit" style="flex:1">Create admin</button>
+          </div>
+        </form>
+      {% elif step == "backend" %}
+        <p>Admin created. Now pair the frontend with the backend.</p>
+        <div class="alert">
+          <div class="alert-title">Grab the master key</div>
+          Run <code>docker exec -it mnemos-backend python -m app.cli master-key view</code> and paste the value below.
+        </div>
+        <form method="post" action="/onboarding/backend">
+          <label>Backend base URL
+            <input name="base_url" value="http://mnemos-backend:8000" required />
+          </label>
+          <label>Master pairing key
+            <input name="master_key" required />
+          </label>
+          <label>Node name
+            <input name="name" value="Frontend" />
+          </label>
+          <div class="row" style="margin-top: 1rem">
+            <button type="submit" style="flex:1">Pair & continue</button>
+          </div>
+        </form>
+      {% else %}
+        <div class="alert ok">
+          <div class="alert-title"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> Setup complete</div>
+          The admin user and backend pairing are both configured. You can now sign in.
+        </div>
+        <div id="warmup-status" class="alert"
+             hx-get="/partials/onboarding-warmup"
+             hx-trigger="load, every 1s"
+             hx-swap="none"
+             style="display:flex; align-items:center; gap:.5rem">
+          <span class="spinner" aria-hidden="true"></span>
+          <span>Preparing detection model… (this only happens once)</span>
+        </div>
+        <a id="warmup-cta" class="btn" href="/login" style="display:none; justify-content:center; width:100%">Go to sign in</a>
+        <script>
+          // Poll the warmup status partial until `done` becomes true,
+          // then reveal the "Go to sign in" CTA. The status div itself
+          // is updated in-place so the user always sees the latest
+          // message.
+          (function () {
+            const target = document.getElementById('warmup-status');
+            const cta = document.getElementById('warmup-cta');
+            if (!target || !cta) return;
+            let gaveUp = false;
+            const giveUp = () => {
+              if (gaveUp) return;
+              gaveUp = true;
+              target.innerHTML = '<span>You can sign in now; the model will warm up on the first /identify call.</span>';
+              target.classList.add('alert-warn');
+              cta.style.display = 'inline-flex';
+            };
+            setTimeout(giveUp, 90000);
+            document.body.addEventListener('htmx:afterRequest', function (ev) {
+              if (!ev.target || ev.target.id !== 'warmup-status') return;
+              let data = null;
+              try { data = JSON.parse(ev.detail.xhr.responseText); } catch (_) { return; }
+              if (!data) return;
+              if (data.error) {
+                target.innerHTML = '<span><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> Model preparation failed: ' + (data.error || 'unknown') + ' — you can still sign in, the model will load on the first /identify call.</span>';
+                target.classList.add('alert-warn');
+                cta.style.display = 'inline-flex';
+                return;
+              }
+              if (data.done) {
+                target.style.display = 'none';
+                cta.style.display = 'inline-flex';
+              } else if (data.running) {
+              } else {
+                target.innerHTML = '<span>You can sign in now; the model will warm up on the first /identify call.</span>';
+                target.classList.add('alert-warn');
+                cta.style.display = 'inline-flex';
+              }
+            });
+          })();
+        </script>
+      {% endif %}
+    </div>
+  </section>
+</div>
+{% endblock %}

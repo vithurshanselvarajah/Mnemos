@@ -18,7 +18,7 @@ WORKDIR /srv
 
 COPY requirements.txt /srv/requirements.txt
 RUN python -m pip install --upgrade "pip>=25" \
-    && python -m pip install --only-binary=:all: --prefer-binary -r /srv/requirements.txt
+    && python -m pip install --prefer-binary -r /srv/requirements.txt
 
 COPY app /srv/app
 

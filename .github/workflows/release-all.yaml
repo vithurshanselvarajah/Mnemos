@@ -2,8 +2,8 @@
 # Release: Mnemos Services
 # =============================================================================
 #
-# Builds and pushes Docker images to GHCR (`<version>` and `stable` tags)
-# and creates GitHub releases with AI-generated notes.
+# Builds and pushes multi-arch Docker images to GHCR (`<version>` and `stable`)
+# using native x86 and ARM runners for maximum performance.
 #
 # Trigger: Manual `workflow_dispatch` with target service selection.
 # =============================================================================
@@ -76,12 +76,83 @@ jobs:
     permissions:
       contents: read
 
-  release:
-    name: Publish (${{ matrix.service }})
+  build-by-arch:
+    name: Build (${{ matrix.service }} / ${{ matrix.platform.arch }})
     needs:
       - matrix-setup
       - prepare
       - test
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      matrix:
+        service: ${{ fromJSON(needs.matrix-setup.outputs.targets) }}
+        platform:
+          - arch: amd64
+            runner: ubuntu-latest
+            target: linux/amd64
+          - arch: arm64
+            runner: ubuntu-26.04-arm
+            target: linux/arm64
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Read version for target
+        id: version
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^__version__[[:space:]]*=[[:space:]]*["'"'"']\([^"'"'"']*\)["'"'"'].*/\1/p' \
+            mnemos-${{ matrix.service }}/app/_version.py | head -n1)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Extract metadata for image
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/mnemos-${{ matrix.service }}
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ./mnemos-${{ matrix.service }}
+          file: ./mnemos-${{ matrix.service }}/Dockerfile
+          platforms: ${{ matrix.platform.target }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=ghcr.io/${{ github.repository_owner }}/mnemos-${{ matrix.service }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-mnemos-${{ matrix.service }}-${{ matrix.platform.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    name: Publish (${{ matrix.service }})
+    needs:
+      - matrix-setup
+      - build-by-arch
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -107,6 +178,13 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          pattern: digests-mnemos-${{ matrix.service }}-*
+          path: /tmp/digests
+          merge-multiple: true
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -127,22 +205,34 @@ jobs:
             type=raw,value=stable
           flavor: latest=auto
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: ./mnemos-${{ matrix.service }}
-          file: ./mnemos-${{ matrix.service }}/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          set -euo pipefail
+
+          TAG_FLAGS=$(jq -r '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+
+          IMAGE_NAME="ghcr.io/${{ github.repository_owner }}/mnemos-${{ matrix.service }}"
+          IMAGE_NAME_LOWER="$(echo "$IMAGE_NAME" | tr '[:upper:]' '[:lower:]')"
+
+          DIGEST_REFS=""
+          for digest in *; do
+            if [[ -f "$digest" ]]; then
+              DIGEST_REFS="${DIGEST_REFS} ${IMAGE_NAME_LOWER}@sha256:${digest}"
+            fi
+          done
+
+          docker buildx imagetools create ${TAG_FLAGS} ${DIGEST_REFS}
+
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect ghcr.io/${{ github.repository_owner }}/mnemos-${{ matrix.service }}:${{ steps.version.outputs.version }}
 
       - name: Collect commits for changelog
         id: commits
         run: |
           set -euo pipefail
-          previous_tag="$(git describe --tags --match "mnemos-${{ matrix.service }}-*" --abbrev=0 2>/dev/null || true)"
+          previous_tag="$(git describe --tags --match "mnemos-${{ matrix.service }}-*" --abbrev=0 2>/devnull || true)"
           if [[ -n "$previous_tag" ]]; then
             range="${previous_tag}..HEAD"
           else
@@ -219,5 +309,4 @@ jobs:
             "dist/mnemos-${{ matrix.service }}-${VERSION}-compose.zip" \
             --title "mnemos-${{ matrix.service }} ${TAG}" \
             --notes-file release-notes.md \
-            --target "${{ github.sha }}" \
-            --clobber
+            --target "${{ github.sha }}"

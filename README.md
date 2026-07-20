@@ -255,4 +255,4 @@ docker exec -it mnemos-backend python -m app.cli healthz --base http://mnemos-ba
 
 ## License
 
-See source.
+See LICENSE file

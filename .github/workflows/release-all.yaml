@@ -1,13 +1,3 @@
-# =============================================================================
-# Release: Mnemos Services
-# =============================================================================
-#
-# Builds and pushes multi-arch Docker images to GHCR (`<version>` and `stable`)
-# using native x86 and ARM runners for maximum performance.
-#
-# Trigger: Manual `workflow_dispatch` with target service selection.
-# =============================================================================
-
 name: Release
 
 on:
@@ -22,6 +12,15 @@ on:
           - backend
           - frontend
           - both
+      bump:
+        description: 'Version bump for the unified release tag'
+        required: true
+        default: 'feature'
+        type: choice
+        options:
+          - breaking
+          - feature
+          - hotfix
 
 permissions:
   contents: write
@@ -298,15 +297,335 @@ jobs:
             docker-compose.yml .env.example docker-compose.pinned.yml
           cd ..
 
-      - name: Create GitHub release
+      - name: Write per-service release info
         env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.version.outputs.tag }}
+          SERVICE: ${{ matrix.service }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          gh release create "$TAG" \
-            "dist/mnemos-${{ matrix.service }}-${VERSION}-compose.zip" \
-            --title "mnemos-${{ matrix.service }} ${TAG}" \
-            --notes-file release-notes.md \
-            --target "${{ github.sha }}"
+          image="ghcr.io/${{ github.repository_owner }}/mnemos-${SERVICE}"
+          image_ref="${image}:${VERSION}"
+          image_stable="${image}:stable"
+          cat > service-info.json <<JSON
+          {
+            "service": "${SERVICE}",
+            "version": "${VERSION}",
+            "image": "${image_ref}",
+            "image_stable": "${image_stable}",
+            "tag": "mnemos-${SERVICE}-v${VERSION}"
+          }
+          JSON
+          cat service-info.json
+
+      - name: Upload per-service release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-mnemos-${{ matrix.service }}-${{ steps.version.outputs.version }}
+          path: |
+            dist/mnemos-${{ matrix.service }}-${{ steps.version.outputs.version }}-compose.zip
+            release-notes.md
+            service-info.json
+          if-no-files-found: error
+          retention-days: 7
+
+  release-aggregator:
+    name: Aggregate release
+    needs:
+      - matrix-setup
+      - release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download every per-service bundle
+        uses: actions/download-artifact@v4
+        with:
+          pattern: bundle-mnemos-*
+          path: /tmp/bundles
+          merge-multiple: true
+
+      - name: Compute next release version
+        id: next_version
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          set -euo pipefail
+          last="$(git tag --list 'v*' --sort=-v:refname | head -n1 || true)"
+          if [[ -z "${last}" ]]; then
+            major=0; minor=0; patch=0
+          else
+            stripped="${last#v}"
+            IFS='.' read -r major minor patch <<< "${stripped}"
+            # Normalise empty/non-numeric components.
+            [[ "${major:-0}" =~ ^[0-9]+$ ]] || major=0
+            [[ "${minor:-0}" =~ ^[0-9]+$ ]] || minor=0
+            [[ "${patch:-0}" =~ ^[0-9]+$ ]] || patch=0
+          fi
+          case "${BUMP}" in
+            breaking) major=$((major + 1)); minor=0; patch=0 ;;
+            feature)  minor=$((minor + 1)); patch=0 ;;
+            hotfix)   patch=$((patch + 1)) ;;
+            *) echo "::error::Unknown bump: ${BUMP}"; exit 1 ;;
+          esac
+          next="v${major}.${minor}.${patch}"
+          echo "last_tag=${last:-<none>}"
+          echo "bump=${BUMP}"
+          echo "next=${next}"
+          echo "next=${next}" >> "$GITHUB_OUTPUT"
+
+      - name: Collect per-service notes and info
+        id: notes_collect
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/notes
+          mkdir -p /tmp/notes
+
+          # Layout A: each artifact is its own sub-directory (merge-multiple=false).
+          if compgen -G '/tmp/bundles/bundle-mnemos-*' >/dev/null; then
+            for dir in /tmp/bundles/bundle-mnemos-*; do
+              [[ -d "$dir" ]] || continue
+              svc="$(basename "$dir" | sed -E 's/^bundle-mnemos-([^-]+)-.*/\1/')"
+              [[ -s "$dir/release-notes.md" ]] && cp "$dir/release-notes.md" "/tmp/notes/${svc}.md"
+              [[ -s "$dir/service-info.json" ]] && cp "$dir/service-info.json" "/tmp/notes/${svc}.json"
+            done
+          else
+            # Layout B: all files flattened into a single directory.
+            # Pair each service-info.json with the release-notes.md that
+            # sits next to it (the per-service release job uploads them
+            # together). If there is exactly one of each, we can match
+            # them by index after sorting.
+            mapfile -t infos < <(find /tmp/bundles -maxdepth 1 -name 'service-info.json' | sort)
+            mapfile -t notes < <(find /tmp/bundles -maxdepth 1 -name 'release-notes.md'   | sort)
+            if [[ "${#infos[@]}" -ne "${#notes[@]}" ]]; then
+              echo "::error::Mismatch between service-info.json (${#infos[@]})" \
+                   "and release-notes.md (${#notes[@]}) in /tmp/bundles"
+              ls -la /tmp/bundles
+              exit 1
+            fi
+            for i in "${!infos[@]}"; do
+              svc="$(jq -r '.service' "${infos[$i]}")"
+              cp "${infos[$i]}" "/tmp/notes/${svc}.json"
+              cp "${notes[$i]}" "/tmp/notes/${svc}.md"
+            done
+          fi
+
+          if ! ls /tmp/notes/*.json >/dev/null 2>&1; then
+            echo "::error::No service info collected. Bundles:"
+            ls -la /tmp/bundles
+            exit 1
+          fi
+          ls -la /tmp/notes
+
+      - name: Build unified release notes (first pass)
+        env:
+          NEXT_VERSION: ${{ steps.next_version.outputs.next }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Mnemos ${NEXT_VERSION}"
+            echo
+            echo "Self-hosted facial recognition stack — backend, frontend, and pgvector."
+            echo
+            echo "### Services in this release"
+            echo
+            for info in /tmp/notes/*.json; do
+              [[ -f "$info" ]] || continue
+              svc="$(jq -r '.service' "$info")"
+              ver="$(jq -r '.version' "$info")"
+              img="$(jq -r '.image' "$info")"
+              echo "* **mnemos-${svc}** v${ver} — \`${img}\`"
+            done
+            echo
+            echo "### Changes"
+            echo
+            for note in /tmp/notes/*.md; do
+              [[ -s "$note" ]] || continue
+              svc="$(basename "$note" .md)"
+              {
+                echo "#### mnemos-${svc}"
+                echo
+                # Strip the per-service "Docker image" footer (we render our
+                # own below) and squeeze runs of blank lines.
+                sed -n '1,/^## Docker image/p' "$note" \
+                  | awk 'BEGIN{p=1} /^## Docker image/{p=0} p' \
+                  | sed '/./,/^$/!d'
+                echo
+              }
+            done
+            echo "### Docker images"
+            echo
+            for info in /tmp/notes/*.json; do
+              [[ -f "$info" ]] || continue
+              img="$(jq -r '.image' "$info")"
+              img_stable="$(jq -r '.image_stable' "$info")"
+              echo "* \`${img}\`"
+              echo "* \`${img_stable}\`"
+            done
+            echo
+            echo "### Install / upgrade"
+            echo
+            echo '```bash'
+            echo "curl -L https://github.com/${{ github.repository }}/releases/download/${NEXT_VERSION}/docker-compose.yml -o docker-compose.yml"
+            echo "curl -L https://github.com/${{ github.repository }}/releases/download/${NEXT_VERSION}/.env.example -o .env.example"
+            echo "cp .env.example .env   # then edit secrets"
+            echo "docker compose pull && docker compose up -d"
+            echo '```'
+          } > release-notes.md
+          echo "Wrote release-notes.md ($(wc -l < release-notes.md) lines)"
+
+      - name: Second pass — dedupe bullets and re-render
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp)"
+          # Walk the file once, dropping any line that exactly matches an
+          # earlier line in the *same* section. We treat the first blank
+          # line after a heading as the start of a new section, so headings
+          # themselves are never compared.
+          awk '
+            BEGIN { section = "" }
+            /^#### / { section = $0; print; next }
+            /^### /  { section = "";  print; next }
+            /^## /   { section = "";  print; next }
+            {
+              key = section "||" $0
+              if ($0 ~ /^[[:space:]]*$/ || !seen[key]++) {
+                print
+              }
+            }
+          ' release-notes.md > "$tmp"
+          mv "$tmp" release-notes.md
+          echo "After dedupe: $(wc -l < release-notes.md) lines"
+
+      - name: Sanity-scan release notes
+        run: |
+          set -euo pipefail
+          fail=0
+
+          # 1. Docker images section must have at least one non-blank bullet.
+          if grep -q '^### Docker images$' release-notes.md; then
+            if ! awk '/^### Docker images$/{f=1;next} /^### /{f=0} f && NF>0' \
+                 release-notes.md | grep -q '.'; then
+              echo "::error::Docker images section is empty"
+              fail=1
+            fi
+          else
+            echo "::error::Missing '### Docker images' section"
+            fail=1
+          fi
+
+          # 2. No duplicated image refs.
+          dups="$(grep -oE '`ghcr\.io/[^`]+`' release-notes.md | sort | uniq -d || true)"
+          if [[ -n "$dups" ]]; then
+            echo "::error::Duplicate image refs in release notes:"
+            echo "$dups"
+            fail=1
+          fi
+
+          # 3. Every service's JSON must be mentioned by name.
+          for info in /tmp/notes/*.json; do
+            [[ -f "$info" ]] || continue
+            svc="$(jq -r '.service' "$info")"
+            if ! grep -q "mnemos-${svc}" release-notes.md; then
+              echo "::error::Release notes do not mention service: ${svc}"
+              fail=1
+            fi
+          done
+
+          # 4. Every `#### mnemos-<svc>` heading must have at least one
+          #    non-blank line after it.
+          for note in /tmp/notes/*.md; do
+            [[ -s "$note" ]] || continue
+            svc="$(basename "$note" .md)"
+            awk -v s="#### mnemos-${svc}" '
+              $0 == s {f=1; next}
+              /^#### / {f=0}
+              f && NF > 0 {found=1; exit}
+              END {exit !found}
+            ' release-notes.md || {
+              echo "::error::Empty section for service ${svc}"
+              fail=1
+            }
+          done
+
+          if [[ "$fail" -ne 0 ]]; then
+            echo "::group::release-notes.md"
+            cat release-notes.md
+            echo "::endgroup::"
+            exit 1
+          fi
+          echo "Release notes pass sanity scan."
+
+      - name: Build unified release assets
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp docker-compose.yml dist/docker-compose.yml
+          cp .env.example dist/.env.example
+          # Pinned compose: replace the ${MNEMOS_TAG:-latest} reference with
+          # the unified release tag so `docker compose pull` from this
+          # archive always pulls the matching set of images.
+          pinned="dist/docker-compose.pinned.yml"
+          sed "s/\${MNEMOS_TAG:-latest}/${{ steps.next_version.outputs.next }}/g" \
+            docker-compose.yml > "$pinned"
+          cd dist
+          zip -r "mnemos-${{ steps.next_version.outputs.next }}-compose.zip" \
+            docker-compose.yml .env.example docker-compose.pinned.yml
+          cd ..
+          ls -la dist
+
+      - name: Create unified GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.next_version.outputs.next }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists — uploading assets only."
+            gh release upload "$TAG" \
+              "dist/mnemos-${TAG}-compose.zip" \
+              --clobber
+          else
+            gh release create "$TAG" \
+              "dist/mnemos-${TAG}-compose.zip" \
+              --title "Mnemos ${TAG}" \
+              --notes-file release-notes.md \
+              --target "${{ github.sha }}"
+          fi
+
+      - name: Update `stable` pointer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.next_version.outputs.next }}
+        run: |
+          set -euo pipefail
+          for info in /tmp/notes/*.json; do
+            [[ -f "$info" ]] || continue
+            svc="$(jq -r '.service' "$info")"
+            ver="$(jq -r '.version' "$info")"
+            echo "Image tag for ${svc} is unchanged: mnemos-${svc}-v${ver} (stable: mnemos-${svc}:stable)."
+          done
+          echo "Per-service image tags (set in _version.py) and the 'stable' tag"
+          echo "are managed by the per-service release jobs; the aggregator only"
+          echo "publishes the unified Mnemos release."
+
+      - name: Summary
+        env:
+          NEXT: ${{ steps.next_version.outputs.next }}
+          BUMP: ${{ inputs.bump }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Mnemos ${NEXT}"
+            echo
+            echo "* Bump: \`${BUMP}\`"
+            for info in /tmp/notes/*.json; do
+              [[ -f "$info" ]] || continue
+              svc="$(jq -r '.service' "$info")"
+              ver="$(jq -r '.version' "$info")"
+              echo "* mnemos-${svc}: v${ver}"
+            done
+            echo "* Release: https://github.com/${{ github.repository }}/releases/tag/${NEXT}"
+          } >> "$GITHUB_STEP_SUMMARY"

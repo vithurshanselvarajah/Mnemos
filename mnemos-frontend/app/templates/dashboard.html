@@ -13,7 +13,11 @@
 </div>
 
 <div class="grid cols-3">
-  <div class="card">
+  <div class="card" id="backend-card"
+       hx-get="/partials/backend-card"
+       hx-trigger="load, every 3s[document.body.dataset.mnemosModelLoaded !== 'true']"
+       hx-swap="innerHTML"
+       data-hx-refresh-on-warmup>
     <h3>Backend</h3>
     {% if not backend_ok %}
       <span class="status error">Unreachable</span>
@@ -25,8 +29,8 @@
     <p class="hint" style="margin-top: .5rem">Model: <code>{{ backend_payload.get('model','—') }}</code></p>
     {% if backend_ok and not backend_payload.get('model_loaded') %}
       <p class="muted" style="color: var(--warn); margin-top: .25rem">
-        The detection model could not be loaded. The last attempt failed (see backend logs).
-        Re-try from the <a href="/models">Models</a> page once the network issue is resolved.
+        The detection model has not loaded or is loading. Check the model status in
+        <a href="/models">Models</a> If thestatus doesn't change in a few seconds after starting the container
       </p>
     {% endif %}
     {% if backend_payload.get('reindex_in_progress') %}
@@ -66,4 +70,35 @@
   <h3>Health snapshot</h3>
   <pre><code>{{ backend_payload | tojson(indent=2) }}</code></pre>
 </div>
+
+<script>
+  (function setupBackendCardAutoRefresh() {
+    var card = document.getElementById('backend-card');
+    if (!card) return;
+
+    card.addEventListener('htmx:afterRequest', function () {
+      var inner = card.querySelector('[data-model-loaded]');
+      var loaded = inner && inner.getAttribute('data-model-loaded') === 'true';
+      if (loaded) {
+        document.body.dataset.mnemosModelLoaded = 'true';
+      } else {
+        delete document.body.dataset.mnemosModelLoaded;
+      }
+    });
+
+    (function seed() {
+      var inner = card.querySelector('[data-model-loaded]');
+      if (inner && inner.getAttribute('data-model-loaded') === 'true') {
+        document.body.dataset.mnemosModelLoaded = 'true';
+      }
+    })();
+
+    ['ws:warmup.done', 'ws:warmup.error', 'ws:reindex.start', 'ws:reindex.done']
+      .forEach(function (evtName) {
+        document.addEventListener(evtName, function () {
+          if (window.htmx) htmx.trigger(card, 'load');
+        });
+      });
+  })();
+</script>
 {% endblock %}

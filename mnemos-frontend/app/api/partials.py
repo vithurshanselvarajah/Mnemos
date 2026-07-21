@@ -73,6 +73,25 @@ def partial_reindex_status(request: Request):
     return render(templates, request, "partials/reindex_status.html", {"info": info})
 
 
+@router.get("/backend-card", response_class=HTMLResponse)
+def partial_backend_card(request: Request):
+    backend_ok = True
+    backend_payload: dict = {}
+    try:
+        r = get_sync("/healthz")
+        backend_payload = r.json()
+        backend_ok = r.status_code == 200
+    except Exception as e:
+        backend_ok = False
+        backend_payload = {"error": str(e)}
+    return render(
+        templates,
+        request,
+        "partials/backend_card.html",
+        {"backend_ok": backend_ok, "backend_payload": backend_payload},
+    )
+
+
 @router.get("/users", response_class=HTMLResponse)
 def partial_users_list(request: Request):
     _require_admin(request)

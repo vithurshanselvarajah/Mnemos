@@ -130,7 +130,7 @@ def onboarding_backend(
     master_key: str = Form(...),
     name: str = Form(default="Frontend"),
 ):
-    import httpx
+    import httpx2 as httpx
 
     error_message: str | None = None
     try:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-import httpx
+import httpx2 as httpx
 from sqlalchemy import select
 
 from app.core.config import settings

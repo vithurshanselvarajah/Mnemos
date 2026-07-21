@@ -4,7 +4,7 @@ import json
 import logging
 from uuid import UUID
 
-import httpx
+import httpx2 as httpx
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, Response
 
@@ -320,7 +320,7 @@ def proxy_openapi(request: Request):
 
 @router.get("/crops/{filename}")
 def proxy_crop(filename: str):
-    import httpx
+    import httpx2 as httpx
 
     from app.services.backend_client import default_api_key, default_base_url
 

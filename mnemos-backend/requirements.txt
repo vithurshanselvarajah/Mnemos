@@ -12,5 +12,5 @@ opencv-python-headless==5.0.0.93
 insightface==1.0.1
 onnxruntime==1.27.0
 websockets==16.1.1
-httpx==0.28.1
+httpx2==2.7.0
 itsdangerous==2.2.0

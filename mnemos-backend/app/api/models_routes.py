@@ -46,8 +46,8 @@ def warmup_model() -> WarmupOut:
     engine = InsightFaceEngine.current()
     if engine.is_loaded() and engine.model_name == name:
         return WarmupOut(name=name, loaded=True, already_loaded=True)
-    started = start_warmup(name)
-    return WarmupOut(name=name, loaded=False, already_loaded=False) if started else WarmupOut(name=name, loaded=False, already_loaded=False)
+    start_warmup(name)
+    return WarmupOut(name=name, loaded=False, already_loaded=False)
 
 
 @router.post("/switch", response_model=ModelInfo, tags=["models"])

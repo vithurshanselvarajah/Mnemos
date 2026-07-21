@@ -104,7 +104,12 @@ def onboarding_admin(
             templates,
             request,
             "onboarding.html",
-            _ctx(request, step="admin", error="Password must be at least 8 characters", warmup=dict(_warmup_state)),
+            _ctx(
+                request,
+                step="admin",
+                error="Password must be at least 8 characters",
+                warmup=dict(_warmup_state),
+            ),
             status_code=400,
         )
     with session_scope() as s:

@@ -279,9 +279,7 @@ def run_reindex_sync(new_model: str) -> None:
         engine.switch_model(new_model)
 
         if not engine.warmup():
-            raise RuntimeError(
-                f"Failed to load model {new_model} into memory after download"
-            )
+            raise RuntimeError(f"Failed to load model {new_model} into memory after download")
 
         crops = _list_crop_ids_with_paths()
         state.total = len(crops)

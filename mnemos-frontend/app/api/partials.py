@@ -61,7 +61,15 @@ def partial_reindex_status(request: Request):
     if r.status_code == 200:
         info = r.json()
     else:
-        info = {"name": "unknown", "loaded": False, "reindex_in_progress": False, "reindex_done": 0, "reindex_total": 0, "embedding_dim": 0, "det_size": 0}
+        info = {
+            "name": "unknown",
+            "loaded": False,
+            "reindex_in_progress": False,
+            "reindex_done": 0,
+            "reindex_total": 0,
+            "embedding_dim": 0,
+            "det_size": 0,
+        }
     return render(templates, request, "partials/reindex_status.html", {"info": info})
 
 

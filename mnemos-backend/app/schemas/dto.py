@@ -88,7 +88,6 @@ class IgnoreRequest(BaseModel):
 
 
 class ModelInfo(BaseModel):
-
     name: str = Field(description="Currently persisted model name (e.g. `buffalo_s`).")
     loaded: bool = Field(description="True when the model weights are loaded into memory and ready to embed.")
     embedding_dim: int = Field(description="Dimensionality of the embedding vectors produced by the model.")
@@ -103,7 +102,6 @@ class ModelInfo(BaseModel):
 
 
 class ModelSwitchRequest(BaseModel):
-
     name: str = Field(description="Target model name. One of `buffalo_s` or `buffalo_l`.")
 
 
@@ -140,7 +138,6 @@ class PairResponse(BaseModel):
 
 
 class HealthOut(BaseModel):
-
     status: str = Field(
         description="`ok` only when the database, vector DB, and model are all healthy. "
         "`degraded` otherwise (e.g. model not loaded)."

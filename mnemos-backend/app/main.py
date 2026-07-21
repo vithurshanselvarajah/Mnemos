@@ -51,7 +51,10 @@ def create_app() -> FastAPI:
         openapi_tags=[
             {"name": "health", "description": "Liveness and dependency checks."},
             {"name": "identify", "description": "Detect and recognize faces in uploaded images."},
-            {"name": "faces", "description": "Manage face crops: assign to people, mark as non-face, ignore."},
+            {
+                "name": "faces",
+                "description": "Manage face crops: assign to people, mark as non-face, ignore.",
+            },
             {"name": "persons", "description": "CRUD for known people and their sample crops."},
             {"name": "models", "description": "Inspect, warmup, and switch the active InsightFace model."},
             {"name": "keys", "description": "Manage API keys (Full-Admin only)."},

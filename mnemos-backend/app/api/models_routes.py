@@ -17,7 +17,6 @@ log = logging.getLogger("mnemos.models")
 
 
 class WarmupOut(BaseModel):
-
     name: str = Field(description="Model name that was requested to load.")
     loaded: bool = Field(
         description="True if the model is already loaded and ready to embed. "

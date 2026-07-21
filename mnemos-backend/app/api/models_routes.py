@@ -22,7 +22,17 @@ class WarmupOut(BaseModel):
     already_loaded: bool
 
 
-@router.get("", response_model=ModelInfo, tags=["models"])
+@router.get(
+    "",
+    response_model=ModelInfo,
+    tags=["models"],
+    summary="Get active model info",
+    description=(
+        "Returns the currently persisted model name, whether it is loaded into memory, "
+        "embedding dimension, detector input size, and live reindex/download progress. "
+        "Used by the dashboard to surface health and by the models page to render status."
+    ),
+)
 def current_model_info() -> ModelInfo:
     snap = state.snapshot()
     return ModelInfo(
@@ -40,7 +50,19 @@ def current_model_info() -> ModelInfo:
     )
 
 
-@router.get("/warmup", response_model=WarmupOut, tags=["models"])
+@router.get(
+    "/warmup",
+    response_model=WarmupOut,
+    tags=["models"],
+    summary="Warmup the active model",
+    description=(
+        "Loads the persisted active model into memory if it isn't already. If the model weights "
+        "aren't on disk, they are downloaded from the InsightFace releases (≈300MB for buffalo_s, "
+        "≈1GB for buffalo_l). Returns immediately and runs the load in a background thread; "
+        "subscribe to `ws://<host>/ws/events` for `warmup.download`, `warmup.done`, and `warmup.error` "
+        "events. If the model is already loaded, returns `already_loaded=true`."
+    ),
+)
 def warmup_model() -> WarmupOut:
     name = active_model()
     engine = InsightFaceEngine.current()
@@ -50,7 +72,19 @@ def warmup_model() -> WarmupOut:
     return WarmupOut(name=name, loaded=False, already_loaded=False)
 
 
-@router.post("/switch", response_model=ModelInfo, tags=["models"])
+@router.post(
+    "/switch",
+    response_model=ModelInfo,
+    tags=["models"],
+    summary="Switch the active detection model",
+    description=(
+        "Switches the active model to `buffalo_s` or `buffalo_l` and re-embedds every stored face "
+        "under the new embedding space. The download (if needed) and reindex run in a background "
+        "thread; progress is published over WebSocket as `reindex.preparing`, `reindex.download`, "
+        "`reindex.start`, `reindex.progress`, and `reindex.done`. Requires a Full-Admin API key. "
+        "Returns 409 if a reindex is already in progress."
+    ),
+)
 def switch_model(req: ModelSwitchRequest, _: ApiKey = Depends(require_full_admin)) -> ModelInfo:
     name = (req.name or "").strip()
     if not name:

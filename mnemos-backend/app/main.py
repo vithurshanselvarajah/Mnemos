@@ -31,10 +31,33 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Mnemos Backend",
         version=get_version(),
+        description=(
+            "Mnemos is a self-hosted facial recognition API. This service stores face embeddings "
+            "in pgvector, supports multi-model detection (buffalo_s / buffalo_l from InsightFace), "
+            "and exposes a JSON HTTP API for identification, person management, and re-indexing.\n\n"
+            "**Authentication** — All `/api/v1/*` endpoints require an API key passed as the "
+            "`X-API-Key` header. Keys are minted via the frontend pairing flow (`/system/pair`) "
+            "or the admin UI. There are two permission levels: `Identify-Only` (can call "
+            "`/identify` and read public data) and `Full-Admin` (can manage persons, keys, models, "
+            "and the master key).\n\n"
+            "**Realtime updates** — Subscribe to `ws://<host>/ws/events` for `inbox.new_face` "
+            "and `inbox.bulk_changed` (live inbox updates) plus `reindex.*` / `warmup.*` events "
+            "during model switches and warmups."
+        ),
         lifespan=lifespan,
         docs_url="/docs",
         redoc_url="/redoc",
         openapi_url="/openapi.json",
+        openapi_tags=[
+            {"name": "health", "description": "Liveness and dependency checks."},
+            {"name": "identify", "description": "Detect and recognize faces in uploaded images."},
+            {"name": "faces", "description": "Manage face crops: assign to people, mark as non-face, ignore."},
+            {"name": "persons", "description": "CRUD for known people and their sample crops."},
+            {"name": "models", "description": "Inspect, warmup, and switch the active InsightFace model."},
+            {"name": "keys", "description": "Manage API keys (Full-Admin only)."},
+            {"name": "system", "description": "Master key, pairing, and bootstrap (Full-Admin only)."},
+            {"name": "crops", "description": "Fetch stored face crop JPEGs by crop UUID."},
+        ],
     )
 
     origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]

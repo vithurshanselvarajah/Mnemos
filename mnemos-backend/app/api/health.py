@@ -13,7 +13,18 @@ from app.services.reindex import active_model, state
 router = APIRouter()
 
 
-@router.get("/healthz", response_model=HealthOut, tags=["health"])
+@router.get(
+    "/healthz",
+    response_model=HealthOut,
+    tags=["health"],
+    summary="Service health check",
+    description=(
+        "Returns the overall service status and per-dependency liveness. "
+        "Status is `ok` only when the database, vector DB, **and** model are all reachable. "
+        "If the model isn't loaded (e.g. weights download failed), the status is `degraded` "
+        "and `model_loaded` is false."
+    ),
+)
 def healthz() -> HealthOut:
     db_ok = True
     try:

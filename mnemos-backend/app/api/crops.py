@@ -16,7 +16,20 @@ router = APIRouter(prefix="/crops", tags=["crops"])
 log = logging.getLogger("mnemos.crops")
 
 
-@router.get("/{filename}", tags=["crops"])
+@router.get(
+    "/{filename}",
+    tags=["crops"],
+    summary="Get a face crop image",
+    description=(
+        "Returns the stored JPEG for a face crop. The `filename` is the crop UUID with a `.jpg` "
+        "extension (e.g. `7c4a8d09-ca38-4e2e-b27a-2c0e6a2c5e1f.jpg`). Returns 404 if the crop "
+        "doesn't exist or the file is missing from disk."
+    ),
+    responses={
+        200: {"content": {"image/jpeg": {}}, "description": "The crop JPEG"},
+        404: {"description": "Crop not found or file missing"},
+    },
+)
 def get_crop(filename: str) -> Response:
     if not filename.endswith(".jpg"):
         raise HTTPException(status_code=404, detail="not found")

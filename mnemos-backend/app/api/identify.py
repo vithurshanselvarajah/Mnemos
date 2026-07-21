@@ -195,7 +195,20 @@ def _match(embedding: np.ndarray, model: str, base_threshold: float) -> Identify
         )
 
 
-@router.post("", response_model=IdentifyResponse)
+@router.post(
+    "",
+    response_model=IdentifyResponse,
+    tags=["identify"],
+    summary="Identify faces in an image",
+    description=(
+        "Upload an image as `multipart/form-data` with the `file` field. Detects every face, "
+        "matches each against the active model's embedding space, and returns one entry per "
+        "detection. Recognized faces include the matched person, confidence, and a base64 data URL "
+        "of the cropped face. Unknown faces are saved to disk and returned with a `crop_id` for "
+        "later assignment via `/api/v1/faces/assign`. Within-request duplicates and re-uploads of "
+        "the same image are deduplicated."
+    ),
+)
 async def identify(request: Request, file: UploadFile = File(...)) -> IdentifyResponse:
     raw = await file.read()
     if not raw:

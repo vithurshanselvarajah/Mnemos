@@ -56,14 +56,29 @@ def _to_out(s, p: Person) -> PersonOut:
     )
 
 
-@router.get("", response_model=list[PersonOut], tags=["persons"])
+@router.get(
+    "",
+    response_model=list[PersonOut],
+    tags=["persons"],
+    summary="List all persons",
+    description="Returns every known person with their sample count, best detection score, and a thumbnail URL.",
+)
 def list_persons() -> list[PersonOut]:
     with session_scope() as s:
         rows = s.execute(select(Person).order_by(Person.name.asc())).scalars().all()
         return [_to_out(s, p) for p in rows]
 
 
-@router.post("", response_model=PersonOut, tags=["persons"])
+@router.post(
+    "",
+    response_model=PersonOut,
+    tags=["persons"],
+    summary="Create a person",
+    description=(
+        "Creates a new person. Name is case-insensitively unique. `custom_threshold` (optional) "
+        "overrides the global match threshold for this person. Requires a Full-Admin API key."
+    ),
+)
 def create_person(req: PersonCreate, _: ApiKey = Depends(require_full_admin)) -> PersonOut:
     name = req.name.strip()
     if not name:
@@ -82,7 +97,16 @@ def create_person(req: PersonCreate, _: ApiKey = Depends(require_full_admin)) ->
         return _to_out(s, p)
 
 
-@router.patch("/{person_id}", response_model=PersonOut, tags=["persons"])
+@router.patch(
+    "/{person_id}",
+    response_model=PersonOut,
+    tags=["persons"],
+    summary="Update a person",
+    description=(
+        "Renames a person and/or changes their custom match threshold. Returns 409 if the new "
+        "name collides with an existing person. Requires a Full-Admin API key."
+    ),
+)
 def update_person(
     person_id: uuid.UUID, req: PersonUpdate, _: ApiKey = Depends(require_full_admin)
 ) -> PersonOut:
@@ -118,7 +142,16 @@ def update_person(
         return _to_out(s, p)
 
 
-@router.delete("/{person_id}", tags=["persons"])
+@router.delete(
+    "/{person_id}",
+    tags=["persons"],
+    summary="Delete a person",
+    description=(
+        "Deletes a person. Their assigned crops are returned to the inbox (`UNASSIGNED`) so the "
+        "user can re-assign them, and the person's averaged embedding is removed from every model. "
+        "Requires a Full-Admin API key."
+    ),
+)
 def delete_person(person_id: uuid.UUID, _: ApiKey = Depends(require_full_admin)) -> dict:
     with session_scope() as s:
         p = s.get(Person, person_id)
@@ -153,7 +186,13 @@ def _crop_to_out(c: FaceCrop) -> FaceCropOut:
     )
 
 
-@router.get("/{person_id}", response_model=PersonOut, tags=["persons"])
+@router.get(
+    "/{person_id}",
+    response_model=PersonOut,
+    tags=["persons"],
+    summary="Get a person",
+    description="Returns a single person with their current sample count, best score, and thumbnail URL.",
+)
 def get_person(person_id: uuid.UUID) -> PersonOut:
     with session_scope() as s:
         p = s.get(Person, person_id)
@@ -162,7 +201,16 @@ def get_person(person_id: uuid.UUID) -> PersonOut:
         return _to_out(s, p)
 
 
-@router.get("/{person_id}/crops", response_model=list[FaceCropOut], tags=["persons"])
+@router.get(
+    "/{person_id}/crops",
+    response_model=list[FaceCropOut],
+    tags=["persons"],
+    summary="List a person's crops",
+    description=(
+        "Returns every `ASSIGNED` face crop belonging to the person, ordered by detection score "
+        "then creation time. Used to render the person's photos page."
+    ),
+)
 def list_person_crops(person_id: uuid.UUID) -> list[FaceCropOut]:
     with session_scope() as s:
         p = s.get(Person, person_id)
@@ -183,7 +231,16 @@ def list_person_crops(person_id: uuid.UUID) -> list[FaceCropOut]:
         return [_crop_to_out(c) for c in rows]
 
 
-@router.delete("/{person_id}/crops/{crop_id}", tags=["persons"])
+@router.delete(
+    "/{person_id}/crops/{crop_id}",
+    tags=["persons"],
+    summary="Delete a crop from a person",
+    description=(
+        "Removes a single face crop from a person, deletes the JPEG from disk, removes the "
+        "vector embedding, and rebuilds the person's averaged embedding. Requires a Full-Admin "
+        "API key."
+    ),
+)
 def delete_person_crop(
     person_id: uuid.UUID,
     crop_id: uuid.UUID,

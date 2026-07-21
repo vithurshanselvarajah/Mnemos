@@ -29,14 +29,30 @@ def _to_out(row: ApiKey) -> ApiKeyOut:
     )
 
 
-@router.get("", response_model=list[ApiKeyOut], tags=["keys"])
+@router.get(
+    "",
+    response_model=list[ApiKeyOut],
+    tags=["keys"],
+    summary="List API keys",
+    description="Returns every API key (including revoked ones) ordered by creation time. Requires a Full-Admin API key.",
+)
 def list_keys(_: ApiKey = Depends(require_full_admin)) -> list[ApiKeyOut]:
     with session_scope() as s:
         rows = s.execute(select(ApiKey).order_by(ApiKey.created_at.desc())).scalars().all()
         return [_to_out(r) for r in rows]
 
 
-@router.post("", response_model=ApiKeyCreateResponse, tags=["keys"])
+@router.post(
+    "",
+    response_model=ApiKeyCreateResponse,
+    tags=["keys"],
+    summary="Create an API key",
+    description=(
+        "Mints a new API key. `raw_key` is only returned in this response — store it now, it "
+        "cannot be recovered later. Permission level must be `Identify-Only` or `Full-Admin`. "
+        "Requires a Full-Admin API key."
+    ),
+)
 def create_key(req: ApiKeyCreate, _: ApiKey = Depends(require_full_admin)) -> ApiKeyCreateResponse:
     perm = req.permission_level
     if perm not in (PermissionLevel.IDENTIFY_ONLY.value, PermissionLevel.FULL_ADMIN.value):
@@ -48,7 +64,16 @@ def create_key(req: ApiKeyCreate, _: ApiKey = Depends(require_full_admin)) -> Ap
     return ApiKeyCreateResponse(api_key=_to_out(row), raw_key=raw)
 
 
-@router.post("/{key_id}/revoke", response_model=ApiKeyOut, tags=["keys"])
+@router.post(
+    "/{key_id}/revoke",
+    response_model=ApiKeyOut,
+    tags=["keys"],
+    summary="Revoke an API key",
+    description=(
+        "Marks the API key as revoked (sets `revoked_at`). The key will fail authentication on "
+        "any future request. The row is kept for audit. Requires a Full-Admin API key."
+    ),
+)
 def revoke_key(key_id: uuid.UUID, _: ApiKey = Depends(require_full_admin)) -> ApiKeyOut:
     with session_scope() as s:
         row = s.get(ApiKey, key_id)
@@ -61,7 +86,12 @@ def revoke_key(key_id: uuid.UUID, _: ApiKey = Depends(require_full_admin)) -> Ap
         return _to_out(row)
 
 
-@router.delete("/{key_id}", tags=["keys"])
+@router.delete(
+    "/{key_id}",
+    tags=["keys"],
+    summary="Delete an API key",
+    description="Hard-deletes the API key. Requires a Full-Admin API key.",
+)
 def delete_key(key_id: uuid.UUID, _: ApiKey = Depends(require_full_admin)) -> dict:
     with session_scope() as s:
         row = s.get(ApiKey, key_id)

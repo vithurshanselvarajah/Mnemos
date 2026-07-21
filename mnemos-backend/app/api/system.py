@@ -19,17 +19,45 @@ def _require_admin(request) -> None:
         raise HTTPException(status_code=403, detail="Full-Admin API key required")
 
 
-@router.get("/master", response_model=str, tags=["system"])
+@router.get(
+    "/master",
+    response_model=str,
+    tags=["system"],
+    summary="Get the current master key",
+    description=(
+        "Returns the current master key. The master key is used once during initial bootstrap to "
+        "pair a frontend and mint the first Full-Admin API key. Treat it as a secret."
+    ),
+)
 def view_master() -> str:
     return ensure_master_key()
 
 
-@router.post("/master/rotate", response_model=str, tags=["system"])
+@router.post(
+    "/master/rotate",
+    response_model=str,
+    tags=["system"],
+    summary="Rotate the master key",
+    description=(
+        "Generates a new master key, invalidating the previous one. Existing API keys are not "
+        "affected — only new pairing flows must use the new key."
+    ),
+)
 def rotate_master() -> str:
     return rotate_master_key()
 
 
-@router.post("/pair", response_model=PairResponse, tags=["system"])
+@router.post(
+    "/pair",
+    response_model=PairResponse,
+    tags=["system"],
+    summary="Pair with the master key (bootstrap)",
+    description=(
+        "Exchanges the master key for a brand-new Full-Admin API key. This is the bootstrap step: "
+        "run it once on first install to give your frontend (or a script) admin access. The "
+        "returned `raw_key` is shown only once."
+    ),
+)
 def pair_with_master_key(req: PairRequest):
     expected = ensure_master_key()
     if not compare_digest(req.master_key.strip(), expected):

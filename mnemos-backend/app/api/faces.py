@@ -41,7 +41,16 @@ def _to_out(c: FaceCrop) -> FaceCropOut:
     )
 
 
-@router.get("/unassigned", response_model=UnassignedPage, tags=["faces"])
+@router.get(
+    "/unassigned",
+    response_model=UnassignedPage,
+    tags=["faces"],
+    summary="List unassigned face crops (inbox)",
+    description=(
+        "Returns a paginated list of face crops that have not yet been assigned to a person. "
+        "Used to power the inbox review queue in the UI."
+    ),
+)
 def list_unassigned(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=24, ge=1, le=200),
@@ -73,7 +82,16 @@ def _resolve_person(req: AssignRequest, s) -> Person:
     raise HTTPException(status_code=400, detail="Provide person_id or new_person_name")
 
 
-@router.post("/assign", tags=["faces"])
+@router.post(
+    "/assign",
+    tags=["faces"],
+    summary="Assign crops to a person",
+    description=(
+        "Assigns one or more unassigned crops to a person. Provide either `person_id` for an "
+        "existing person or `new_person_name` to create one. After assignment the person's "
+        "averaged embedding is rebuilt and the inbox broadcasts an `inbox.bulk_changed` event."
+    ),
+)
 def assign_faces(req: AssignRequest):
     if not req.crop_ids:
         raise HTTPException(status_code=400, detail="crop_ids is required")
@@ -153,7 +171,15 @@ def _rebuild_person_averaged(person_id: uuid.UUID, model_name: str) -> None:
         vector_repo.upsert_averaged(person_id, avg, model_name)
 
 
-@router.post("/mark-non-face", tags=["faces"])
+@router.post(
+    "/mark-non-face",
+    tags=["faces"],
+    summary="Mark crops as non-face",
+    description=(
+        "Marks the given crops as `NON_FACE` (e.g. a misdetection). The crops are removed from "
+        "the vector index and from the inbox. This is reversible by re-uploading the image."
+    ),
+)
 def mark_non_face(req: MarkNonFaceRequest):
     if not req.crop_ids:
         raise HTTPException(status_code=400, detail="crop_ids is required")
@@ -167,7 +193,16 @@ def mark_non_face(req: MarkNonFaceRequest):
     return {"ok": True, "count": len(req.crop_ids)}
 
 
-@router.post("/ignore", tags=["faces"])
+@router.post(
+    "/ignore",
+    tags=["faces"],
+    summary="Ignore crops",
+    description=(
+        "Marks the given crops as `IGNORED`. The crops are removed from the vector index and "
+        "from the inbox. Unlike `mark-non-face`, the original detection is kept as ignored "
+        "rather than discarded as a false positive."
+    ),
+)
 def ignore_crops(req: IgnoreRequest):
     if not req.crop_ids:
         raise HTTPException(status_code=400, detail="crop_ids is required")

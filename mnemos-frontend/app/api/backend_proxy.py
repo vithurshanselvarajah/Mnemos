@@ -163,7 +163,7 @@ async def proxy_model_switch(request: Request):
     return Response(content=r.content, status_code=r.status_code, media_type="application/json")
 
 
-@router.get("/models/warmup")
+@router.api_route("/models/warmup", methods=["GET", "POST"])
 def proxy_model_warmup():
     r = get_sync("/api/v1/models/warmup")
     return Response(content=r.content, status_code=r.status_code, media_type="application/json")

@@ -30,6 +30,10 @@ class ReindexState:
         self.total: int = 0
         self.done: int = 0
         self.last_error: str | None = None
+        self.download_active: bool = False
+        self.download_model: str = ""
+        self.download_done: int = 0
+        self.download_total: int = 0
 
     def snapshot(self) -> dict:
         with self._lock:
@@ -39,6 +43,10 @@ class ReindexState:
                 "total": self.total,
                 "done": self.done,
                 "error": self.last_error,
+                "download_active": self.download_active,
+                "download_model": self.download_model,
+                "download_done": self.download_done,
+                "download_total": self.download_total,
             }
 
     def start(self, model: str, total: int) -> None:
@@ -58,6 +66,24 @@ class ReindexState:
             self.running = False
             if error:
                 self.last_error = error
+
+    def download_begin(self, model: str) -> None:
+        with self._lock:
+            self.download_active = True
+            self.download_model = model
+            self.download_done = 0
+            self.download_total = 0
+
+    def download_update(self, done: int, total: int) -> None:
+        with self._lock:
+            self.download_done = done
+            self.download_total = total
+
+    def download_end(self) -> None:
+        with self._lock:
+            self.download_active = False
+            self.download_done = 0
+            self.download_total = 0
 
 
 state = ReindexState()
@@ -107,17 +133,18 @@ def _broadcast_error(message: str) -> None:
     websocket_hub.publish({"type": "reindex.error", "message": message})
 
 
-def _broadcast_download(done: int, total: int, model: str) -> None:
+def _broadcast_download(done: int, total: int, model: str, *, kind: str = "reindex") -> None:
     pct = int(100 * done / total) if total > 0 else 0
     websocket_hub.publish(
         {
-            "type": "reindex.download",
+            "type": f"{kind}.download",
             "model": model,
             "done": done,
             "total": total,
             "pct": pct,
         }
     )
+    state.download_update(done, total)
 
 
 _MODEL_REPO_URL = "https://github.com/deepinsight/insightface/releases/download/v0.7"
@@ -140,10 +167,10 @@ def _model_already_extracted(name: str) -> bool:
     return bool(glob.glob(os.path.join(d, "*.onnx")))
 
 
-def _download_model(name: str) -> bool:
+def _download_model(name: str, kind: str = "reindex") -> bool:
     if _model_already_extracted(name):
         log.info("model %s already extracted, skipping download", name)
-        _broadcast_download(0, 0, name)
+        _broadcast_download(0, 0, name, kind=kind)
         return True
 
     url = _MODEL_REPO_URL + "/" + name + ".zip"
@@ -170,17 +197,18 @@ def _download_model(name: str) -> bool:
                     pct = int(100 * done / total) if total > 0 else 0
                     now = time.time()
                     if pct != last_pct or (now - last_broadcast) > 0.25:
-                        _broadcast_download(done, total, name)
+                        _broadcast_download(done, total, name, kind=kind)
                         last_pct = pct
                         last_broadcast = now
             if total > 0 and (total - done) > 1024 * 1024:
                 raise RuntimeError(f"download truncated: got {done} of {total} bytes")
-            _broadcast_download(done, total, name)
+            _broadcast_download(done, total, name, kind=kind)
             log.info("model %s download complete: %d bytes", name, done)
         return True
     except Exception as e:
         log.exception("model %s download failed", name)
         log.warning("model %s download failed: %s", name, e)
+        state.last_error = f"Model {name} download failed: {e}"
         try:
             if os.path.isfile(dest) and os.path.getsize(dest) < 1024:
                 os.remove(dest)
@@ -199,6 +227,7 @@ def _extract_model(name: str) -> bool:
     zip_path = _model_zip_path(name)
     if not os.path.isfile(zip_path):
         log.warning("model zip missing for %s: %s", name, zip_path)
+        state.last_error = f"Model {name} zip not found after download"
         return False
     try:
         with zipfile.ZipFile(zip_path) as zf:
@@ -206,14 +235,22 @@ def _extract_model(name: str) -> bool:
         return True
     except Exception as e:
         log.warning("model extract failed: %s", e)
+        state.last_error = f"Model {name} extract failed: {e}"
         return False
 
 
-def ensure_model_ready(name: str) -> bool:
+def ensure_model_ready(name: str, kind: str = "reindex") -> bool:
     if _model_already_extracted(name):
-        _broadcast_download(0, 0, name)
+        _broadcast_download(0, 0, name, kind=kind)
+        if kind == "warmup":
+            state.download_end()
         return True
-    if not _download_model(name):
+    if kind == "warmup":
+        state.download_begin(name)
+    ok = _download_model(name, kind=kind)
+    if kind == "warmup":
+        state.download_end()
+    if not ok:
         return False
     return _extract_model(name)
 
@@ -230,13 +267,21 @@ def run_reindex_sync(new_model: str) -> None:
                 "message": "Downloading model weights for " + new_model,
             }
         )
+        state.download_begin(new_model)
         if not ensure_model_ready(new_model):
+            state.download_end()
             raise RuntimeError(
                 "Failed to download model weights and no cached copy is available. "
                 "Check the container's network access to insightface.ai."
             )
+        state.download_end()
 
         engine.switch_model(new_model)
+
+        if not engine.warmup():
+            raise RuntimeError(
+                f"Failed to load model {new_model} into memory after download"
+            )
 
         crops = _list_crop_ids_with_paths()
         state.total = len(crops)
@@ -328,6 +373,40 @@ def start_reindex(new_model: str) -> bool:
     if state.running:
         return False
     t = threading.Thread(target=run_reindex_sync, args=(new_model,), name="mnemos-reindex", daemon=True)
+    t.start()
+    return True
+
+
+def _run_warmup_sync(name: str) -> None:
+    try:
+        engine = InsightFaceEngine.current()
+        if engine.model_name != name:
+            engine.switch_model(name)
+        if engine.is_loaded():
+            websocket_hub.publish({"type": "warmup.done", "model": name, "already_loaded": True})
+            return
+        if not ensure_model_ready(name, kind="warmup"):
+            state.last_error = state.last_error or f"Failed to prepare model {name} (download or extract)"
+            websocket_hub.publish({"type": "warmup.error", "model": name, "message": state.last_error})
+            return
+        ok = engine.warmup()
+        if not ok:
+            state.last_error = f"Failed to load model {name} into memory"
+            websocket_hub.publish({"type": "warmup.error", "model": name, "message": state.last_error})
+            return
+        websocket_hub.publish({"type": "warmup.done", "model": name, "already_loaded": False})
+    except Exception as e:
+        log.exception("warmup failed: %s", e)
+        state.last_error = str(e)
+        websocket_hub.publish({"type": "warmup.error", "model": name, "message": str(e)})
+
+
+def start_warmup(name: str) -> bool:
+    if state.download_active:
+        return False
+    if InsightFaceEngine.current().is_loaded() and InsightFaceEngine.current().model_name == name:
+        return True
+    t = threading.Thread(target=_run_warmup_sync, args=(name,), name="mnemos-warmup", daemon=True)
     t.start()
     return True
 

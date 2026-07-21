@@ -105,9 +105,14 @@ def switch_model(req: ModelSwitchRequest, _: ApiKey = Depends(require_full_admin
     snap = state.snapshot()
     return ModelInfo(
         name=name,
+        loaded=InsightFaceEngine.current().is_loaded(),
         embedding_dim=settings.embedding_dim,
         det_size=settings.det_size,
         reindex_in_progress=True,
         reindex_total=snap["total"],
         reindex_done=0,
+        download_active=snap["download_active"],
+        download_model=snap["download_model"] or None,
+        download_done=snap["download_done"],
+        download_total=snap["download_total"],
     )

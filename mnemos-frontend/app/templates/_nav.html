@@ -1,8 +1,8 @@
 {% if user %}
 <nav class="nav"
-     x-data="{ mobileOpen: false, library: false, admin: false, userMenu: false }"
-     @keydown.escape.window="mobileOpen = false; library = false; admin = false; userMenu = false"
-     @click.outside="mobileOpen = false; library = false; admin = false; userMenu = false">
+     x-data="{ mobileOpen: false, openMenu: '', userMenu: false }"
+     @keydown.escape.window="mobileOpen = false; openMenu = ''; userMenu = false"
+     @click.outside="mobileOpen = false; openMenu = ''; userMenu = false">
   <a class="brand" href="/dashboard">
     <span class="logo">
       <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -17,11 +17,11 @@
   <a class="link top desktop-only" href="/identify">Identify</a>
 
   <div class="menu desktop-only">
-    <button class="link menu-trigger" @click="library = !library" :aria-expanded="library">
+    <button class="link menu-trigger" @click="openMenu = (openMenu === 'library' ? '' : 'library')" :aria-expanded="openMenu === 'library'">
       Library
       <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3.5l3 3 3-3"/></svg>
     </button>
-    <div class="menu-list" x-show="library" x-transition.opacity x-cloak>
+    <div class="menu-list" x-show="openMenu === 'library'" x-transition.opacity x-cloak>
       <a class="menu-item" href="/inbox">
         <span class="mi-icon" aria-hidden="true"><i class="fa-solid fa-inbox"></i></span>
         <span class="mi-text"><strong>Inbox</strong><small>Unknown faces to review</small></span>
@@ -35,11 +35,11 @@
 
   {% if is_admin %}
   <div class="menu desktop-only">
-    <button class="link menu-trigger" @click="admin = !admin" :aria-expanded="admin">
+    <button class="link menu-trigger" @click="openMenu = (openMenu === 'admin' ? '' : 'admin')" :aria-expanded="openMenu === 'admin'">
       Admin
       <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3.5l3 3 3-3"/></svg>
     </button>
-    <div class="menu-list right" x-show="admin" x-transition.opacity x-cloak>
+    <div class="menu-list right" x-show="openMenu === 'admin'" x-transition.opacity x-cloak>
       <a class="menu-item" href="/models">
         <span class="mi-icon" aria-hidden="true"><i class="fa-solid fa-brain"></i></span>
         <span class="mi-text"><strong>Models</strong><small>Detection &amp; re-indexing</small></span>
@@ -76,11 +76,11 @@
   </a>
 
   <div class="menu user-menu desktop-only">
-    <button class="link menu-trigger user-trigger" @click="userMenu = !userMenu" :aria-expanded="userMenu">
+    <button class="link menu-trigger user-trigger" @click="openMenu = (openMenu === 'user' ? '' : 'user'); userMenu = openMenu === 'user'" :aria-expanded="openMenu === 'user'">
       <span class="avatar">{{ user.username[:1] | upper }}</span>
       <span class="user-name">{{ user.username }} <small>({{ user.role }})</small></span>
     </button>
-    <div class="menu-list right" x-show="userMenu" x-transition.opacity x-cloak>
+    <div class="menu-list right" x-show="openMenu === 'user'" x-transition.opacity x-cloak>
       <div class="menu-header">
         <strong>{{ user.username }}</strong>
         <small>{{ user.role }}</small>

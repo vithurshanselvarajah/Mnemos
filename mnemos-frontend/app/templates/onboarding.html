@@ -44,6 +44,10 @@
         </div>
       </div>
 
+      {% if error %}
+        <div class="alert error" style="margin-top: 1rem">{{ error }}</div>
+      {% endif %}
+
       {% if step == "admin" %}
         <form method="post" action="/onboarding/admin">
           <label>Username
@@ -67,13 +71,13 @@
         </div>
         <form method="post" action="/onboarding/backend">
           <label>Backend base URL
-            <input name="base_url" value="http://mnemos-backend:8000" required />
+            <input name="base_url" value="{{ form_values.base_url if form_values else 'http://mnemos-backend:8000' }}" required />
           </label>
           <label>Master pairing key
-            <input name="master_key" required />
+            <input name="master_key" value="{{ form_values.master_key if form_values else '' }}" required />
           </label>
           <label>Node name
-            <input name="name" value="Frontend" />
+            <input name="name" value="{{ form_values.name if form_values and form_values.name else 'Frontend' }}" />
           </label>
           <div class="row" style="margin-top: 1rem">
             <button type="submit" style="flex:1">Pair & continue</button>

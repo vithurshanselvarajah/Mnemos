@@ -92,9 +92,21 @@ def onboarding_admin(
     if _has_admin():
         raise HTTPException(status_code=400, detail="Admin already exists")
     if password != password_confirm:
-        raise HTTPException(status_code=400, detail="Passwords do not match")
+        return render(
+            templates,
+            request,
+            "onboarding.html",
+            _ctx(request, step="admin", error="Passwords do not match", warmup=dict(_warmup_state)),
+            status_code=400,
+        )
     if len(password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+        return render(
+            templates,
+            request,
+            "onboarding.html",
+            _ctx(request, step="admin", error="Password must be at least 8 characters", warmup=dict(_warmup_state)),
+            status_code=400,
+        )
     with session_scope() as s:
         s.add(
             User(
@@ -115,6 +127,7 @@ def onboarding_backend(
 ):
     import httpx
 
+    error_message: str | None = None
     try:
         with httpx.Client(timeout=10) as client:
             r = client.post(
@@ -122,12 +135,43 @@ def onboarding_backend(
                 json={"master_key": master_key.strip(), "name": name},
             )
         if r.status_code != 200:
-            raise HTTPException(status_code=400, detail=f"Pairing failed: {r.text}")
+            try:
+                payload = r.json()
+                error_message = (
+                    payload.get("detail")
+                    if isinstance(payload, dict) and isinstance(payload.get("detail"), str)
+                    else f"Pairing failed (HTTP {r.status_code})"
+                )
+            except Exception:
+                error_message = f"Pairing failed (HTTP {r.status_code})"
+            return render(
+                templates,
+                request,
+                "onboarding.html",
+                _ctx(
+                    request,
+                    step="backend",
+                    error=error_message,
+                    form_values={"base_url": base_url, "master_key": master_key, "name": name},
+                    warmup=dict(_warmup_state),
+                ),
+                status_code=400,
+            )
         data = r.json()
-    except HTTPException:
-        raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Pairing failed: {e}")
+        return render(
+            templates,
+            request,
+            "onboarding.html",
+            _ctx(
+                request,
+                step="backend",
+                error=f"Pairing failed: {e}",
+                form_values={"base_url": base_url, "master_key": master_key, "name": name},
+                warmup=dict(_warmup_state),
+            ),
+            status_code=400,
+        )
 
     with session_scope() as s:
         for old in s.execute(select(BackendNode)).scalars().all():

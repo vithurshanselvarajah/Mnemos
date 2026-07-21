@@ -107,59 +107,59 @@
   }
   setInterval(setupWebSocket, 5 * 1000);
 
-  // ---- Inbox counter via WebSocket ------------------------------------
-  //
-  // The backend publishes `inbox.new_face` whenever a new face is
-  // identified. We bump the counter locally (no HTTP roundtrip) and
-  // also fall back to an htmx refresh on `inbox.bulk_changed` and on
-  // 30s poll as a safety net in case the WS missed a frame.
-  let _inboxTotal = null;
-  function setInboxCount(n) {
-    const link = document.getElementById('inbox-counter');
-    if (!link) return;
-    const pill = link.querySelector('.pill');
-    if (!pill) return;
-    pill.innerHTML = '<span class="dot"></span> Inbox ' + (n | 0);
-  }
+  (function () {
+    // Guard: Prevent script from running twice if included in multiple templates
+    if (window.__inboxCounterActive) return;
+    window.__inboxCounterActive = true;
 
-  async function refreshInboxCount() {
-    try {
-      const r = await fetch('/partials/inbox-count', { credentials: 'same-origin' });
-      if (!r.ok) return;
-      const tmp = document.createElement('div');
-      tmp.innerHTML = await r.text();
-      // The partial renders `<span class="pill"><span class="dot"></span> Inbox N</span>`.
-      const txt = (tmp.textContent || '').replace(/[^\d]/g, '');
-      const n = parseInt(txt, 10);
-      if (Number.isFinite(n)) {
-        _inboxTotal = n;
-        setInboxCount(n);
+    let _abortController = null;
+
+    async function refreshInboxCount() {
+      // Cancel any previous in-flight request so slow network responses never overwrite fresh ones
+      if (_abortController) _abortController.abort();
+      _abortController = new AbortController();
+
+      try {
+        const r = await fetch('/partials/inbox-count', {
+          credentials: 'same-origin',
+          signal: _abortController.signal
+        });
+        if (!r.ok) return;
+
+        const rawText = await r.text(); // e.g., "Inbox 3"
+
+        // Targeted Regex: Extract ONLY the number immediately following "Inbox"
+        const match = rawText.match(/Inbox\s*(\d+)/i) || rawText.match(/\d+/);
+
+        if (match && match[1]) {
+          const count = parseInt(match[1], 10);
+          if (Number.isFinite(count)) {
+            const link = document.getElementById('inbox-counter');
+            if (link) {
+              // Re-render the pill cleanly with the exact server count
+              link.innerHTML = `<span class="pill"><span class="dot"></span> Inbox ${count}</span>`;
+            }
+          }
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError') console.error('Failed to update inbox count:', err);
       }
-    } catch (_) { /* ignore */ }
-  }
-
-  // Seed the counter on first paint and on every inbox.bulk_changed.
-  document.addEventListener('DOMContentLoaded', refreshInboxCount);
-  document.body.addEventListener('inbox.bulk_changed', refreshInboxCount);
-
-  // On a new face event, optimistically bump the visible counter.
-  document.body.addEventListener('inbox.new_face', () => {
-    if (_inboxTotal === null) {
-      refreshInboxCount();
-      return;
     }
-    _inboxTotal = _inboxTotal + 1;
-    setInboxCount(_inboxTotal);
-  });
 
-  // On a bulk removal (assign/ignore/mark-non-face), refresh — we
-  // don't try to compute the exact delta from the WS frame because
-  // the user might have done the action themselves locally and the
-  // number going down is easier to read after a single refresh.
-  document.body.addEventListener('inbox.bulk_changed', refreshInboxCount);
+    // 1. Initial Load
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', refreshInboxCount);
+    } else {
+      refreshInboxCount();
+    }
 
-  // Periodic safety net: if the WS missed something, this catches up.
-  setInterval(refreshInboxCount, 30 * 1000);
+    // 2. Re-fetch on WebSocket events (No local +1 math = zero risk of duplication!)
+    document.body.addEventListener('inbox.bulk_changed', refreshInboxCount);
+    document.body.addEventListener('inbox.new_face', refreshInboxCount);
+
+    // 3. Fallback Poll (30 seconds)
+    setInterval(refreshInboxCount, 30000);
+  })();
 
   // ---- Dedicated raw WebSocket for reindex events --------------------
   //

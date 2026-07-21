@@ -88,6 +88,7 @@ body.swagger-host {
 .swagger-server code {
   font-family: var(--swagger-mono);
   color: var(--swagger-text);
+  background: transparent;
 }
 .swagger-server-dot {
   width: 8px; height: 8px; border-radius: 50%;
@@ -551,6 +552,9 @@ body.swagger-host {
 }
 .swagger-ui .code-block-error { background: rgba(239, 68, 68, 0.1); }
 
+/* ============================================================
+   Schemas (Models) section
+   ============================================================ */
 .swagger-ui section.models {
   background: var(--swagger-panel-2);
   border: 1px solid var(--swagger-border);
@@ -563,6 +567,11 @@ body.swagger-host {
   background: var(--swagger-bg);
   border: 1px solid var(--swagger-border);
   border-radius: 6px;
+  margin: 0.5rem 0;
+}
+.swagger-ui section.models .model-container .model-box {
+  background: var(--swagger-bg);
+  padding: 0.75rem;
 }
 .swagger-ui .model { color: var(--swagger-text); }
 .swagger-ui .model .prop-type { color: var(--swagger-accent-2); }
@@ -575,6 +584,118 @@ body.swagger-host {
 .swagger-ui .model .property.primitive .property-name { color: var(--swagger-text); }
 .swagger-ui .model .property .type { color: var(--swagger-accent-2); }
 .swagger-ui .model .property .prop-format { color: var(--swagger-text-faint); }
+.swagger-ui .model .property .property-wrap { color: var(--swagger-text); }
+.swagger-ui .model-box .model-jump-to-path { color: var(--swagger-text-muted); }
+.swagger-ui .model-box .model-jump-to-path .view-source-link { color: var(--swagger-accent-2); }
+.swagger-ui .model .inner-object { color: var(--swagger-text); }
+.swagger-ui .model .inner-object .model { color: var(--swagger-text); }
+.swagger-ui .model .inner-object .property { color: var(--swagger-text); }
+.swagger-ui .model .inner-object .property-name { color: var(--swagger-text); }
+.swagger-ui .model .inner-object .type { color: var(--swagger-accent-2); }
+.swagger-ui .model .inner-object .description { color: var(--swagger-text-muted); }
+.swagger-ui .model .description { color: var(--swagger-text-muted); }
+.swagger-ui .model .default { color: var(--swagger-text-muted); }
+
+/* request/response sample code blocks (the small inline code near schemas) */
+.swagger-ui .model .prop-format,
+.swagger-ui .model .example {
+  color: var(--swagger-text-muted);
+}
+
+/* JSON / model view inside response/request bodies */
+.swagger-ui .opblock-body pre,
+.swagger-ui .opblock-body .highlight-code {
+  background: var(--swagger-bg) !important;
+  border: 1px solid var(--swagger-border);
+  border-radius: 6px;
+}
+.swagger-ui .opblock-body pre code {
+  background: transparent !important;
+  color: var(--swagger-text) !important;
+}
+
+/* Parameters table (path/query params) */
+.swagger-ui .parameters-container .parameters {
+  background: transparent;
+}
+.swagger-ui .parameters-container .parameters tr {
+  background: var(--swagger-panel-2);
+  border-color: var(--swagger-border);
+}
+.swagger-ui .parameters-container .parameters tr:hover {
+  background: var(--swagger-panel) !important;
+}
+.swagger-ui .parameters-container .parameters th {
+  color: var(--swagger-text-faint);
+  background: transparent;
+  border-color: var(--swagger-border);
+}
+.swagger-ui .parameters-container .parameters td {
+  color: var(--swagger-text);
+  background: transparent;
+  border-color: var(--swagger-border);
+}
+.swagger-ui .parameters-container .parameters select {
+  background: var(--swagger-bg);
+  color: var(--swagger-text);
+  border: 1px solid var(--swagger-border);
+}
+.swagger-ui .parameters-container .parameters input[type="text"] {
+  background: var(--swagger-bg);
+  color: var(--swagger-text);
+  border: 1px solid var(--swagger-border);
+}
+.swagger-ui .parameter__name { color: var(--swagger-text) !important; font-weight: 600; }
+.swagger-ui .parameter__type { color: var(--swagger-accent-2) !important; }
+.swagger-ui .parameter__in { color: var(--swagger-text-faint); }
+.swagger-ui .parameter__deprecated { color: var(--swagger-delete); }
+.swagger-ui .parameter__required { color: var(--swagger-delete); }
+.swagger-ui .parameter__description { color: var(--swagger-text-muted); }
+
+/* Body params (request body) */
+.swagger-ui .opblock-body .request-body {
+  background: transparent;
+  color: var(--swagger-text);
+}
+.swagger-ui .opblock-body .request-body .body-param-options {
+  background: var(--swagger-panel-2);
+  border: 1px solid var(--swagger-border);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+}
+.swagger-ui .opblock-body .request-body label {
+  color: var(--swagger-text-muted);
+}
+.swagger-ui .opblock-body .request-body textarea {
+  background: var(--swagger-bg);
+  color: var(--swagger-text);
+  border: 1px solid var(--swagger-border);
+  font-family: var(--swagger-mono);
+  font-size: 0.82rem;
+}
+
+/* Responses area */
+.swagger-ui .responses-wrapper {
+  background: transparent;
+}
+.swagger-ui .response {
+  background: transparent;
+  border-color: var(--swagger-border);
+}
+.swagger-ui .response-col_status { color: var(--swagger-text) !important; font-weight: 700; }
+.swagger-ui .response-col_description { color: var(--swagger-text-muted) !important; }
+.swagger-ui .response .response-col_status .response-undocumented { color: var(--swagger-text-faint); }
+.swagger-ui .response .response-content-type { color: var(--swagger-text-muted); }
+.swagger-ui .response .response-content-type.control-accept { color: var(--swagger-text-muted); }
+.swagger-ui .response .response-tabs__pre {
+  background: var(--swagger-bg);
+  border: 1px solid var(--swagger-border);
+  border-radius: 6px;
+}
+.swagger-ui .response pre.microlight {
+  background: transparent !important;
+  color: var(--swagger-text) !important;
+}
 
 .swagger-ui .tab {
   list-style: none;

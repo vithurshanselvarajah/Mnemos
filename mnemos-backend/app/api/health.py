@@ -7,6 +7,7 @@ from app.core.version import get_version
 from app.db.session import get_engine
 from app.schemas.dto import HealthOut
 from app.services import vector_repo
+from app.services.engine import InsightFaceEngine
 from app.services.reindex import active_model, state
 
 router = APIRouter()
@@ -21,12 +22,15 @@ def healthz() -> HealthOut:
     except Exception:
         db_ok = False
     snap = state.snapshot()
+    model_loaded = InsightFaceEngine.current().is_loaded()
+    vector_ok = vector_repo.ping()
     return HealthOut(
-        status="ok" if (db_ok and vector_repo.ping()) else "degraded",
+        status="ok" if (db_ok and vector_ok and model_loaded) else "degraded",
         version=get_version(),
         model=active_model(),
+        model_loaded=model_loaded,
         db=db_ok,
-        vector_db=vector_repo.ping(),
+        vector_db=vector_ok,
         reindex_in_progress=snap["running"],
         reindex_done=snap["done"],
         reindex_total=snap["total"],

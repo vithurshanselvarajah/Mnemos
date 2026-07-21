@@ -15,12 +15,20 @@
 <div class="grid cols-3">
   <div class="card">
     <h3>Backend</h3>
-    {% if backend_ok %}
+    {% if not backend_ok %}
+      <span class="status error">Unreachable</span>
+    {% elif backend_payload.get('model_loaded') %}
       <span class="status ok">Reachable</span>
     {% else %}
-      <span class="status error">Unreachable</span>
+      <span class="status warn">Model not loaded</span>
     {% endif %}
     <p class="hint" style="margin-top: .5rem">Model: <code>{{ backend_payload.get('model','—') }}</code></p>
+    {% if backend_ok and not backend_payload.get('model_loaded') %}
+      <p class="muted" style="color: var(--warn); margin-top: .25rem">
+        The detection model could not be loaded. The last attempt failed (see backend logs).
+        Re-try from the <a href="/models">Models</a> page once the network issue is resolved.
+      </p>
+    {% endif %}
     {% if backend_payload.get('reindex_in_progress') %}
       <p class="muted">Re-indexing {{ backend_payload.get('reindex_done', 0) }} / {{ backend_payload.get('reindex_total', 0) }}</p>
     {% endif %}

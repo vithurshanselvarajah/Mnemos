@@ -89,11 +89,16 @@ class IgnoreRequest(BaseModel):
 
 class ModelInfo(BaseModel):
     name: str
+    loaded: bool = False
     embedding_dim: int
     det_size: int
     reindex_in_progress: bool
     reindex_total: int = 0
     reindex_done: int = 0
+    download_active: bool = False
+    download_model: str | None = None
+    download_done: int = 0
+    download_total: int = 0
 
 
 class ModelSwitchRequest(BaseModel):
@@ -136,6 +141,7 @@ class HealthOut(BaseModel):
     status: str
     version: str
     model: str | None = None
+    model_loaded: bool = False
     db: bool
     vector_db: bool
     reindex_in_progress: bool

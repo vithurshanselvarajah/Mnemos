@@ -268,7 +268,11 @@ jobs:
         run: |
           set -euo pipefail
           {
-            echo
+            # Sentinel that the aggregator splits on. Anything before this
+            # marker is user-visible release content; anything after is the
+            # per-service docker pull footer (re-rendered by the
+            # aggregator).
+            echo "<!-- MNEMOS-RELEASE-CONTENT-START -->"
             if [[ -n "${AI_NOTES_FILE:-}" && -s "$AI_NOTES_FILE" ]]; then
               cat "$AI_NOTES_FILE"
             else
@@ -276,6 +280,7 @@ jobs:
               echo
               echo "${COMMITS:-"- Maintenance release"}"
             fi
+            echo "<!-- MNEMOS-RELEASE-CONTENT-END -->"
             echo
             echo "## Docker image"
             echo "\`\`\`"
@@ -435,8 +440,7 @@ jobs:
               [[ -f "$info" ]] || continue
               svc="$(jq -r '.service' "$info")"
               ver="$(jq -r '.version' "$info")"
-              img="$(jq -r '.image' "$info")"
-              echo "* **mnemos-${svc}** v${ver} — \`${img}\`"
+              echo "* **mnemos-${svc}** v${ver}"
             done
             echo
             echo "### Changes"
@@ -447,11 +451,23 @@ jobs:
               {
                 echo "#### mnemos-${svc}"
                 echo
-                # Strip the per-service "Docker image" footer (we render our
-                # own below) and squeeze runs of blank lines.
-                sed -n '1,/^## Docker image/p' "$note" \
-                  | awk 'BEGIN{p=1} /^## Docker image/{p=0} p' \
-                  | sed '/./,/^$/!d'
+                # Extract the per-service content between the sentinel
+                # markers (anything after the END marker is the per-service
+                # docker-pull footer, which we re-render below).
+                sed -n '/<!-- MNEMOS-RELEASE-CONTENT-START -->/,/<!-- MNEMOS-RELEASE-CONTENT-END -->/p' \
+                  "$note" \
+                  | sed '1d;$d' \
+                  # Rebase heading levels: drop the document H1 (we have our
+                  # own `## Mnemos …` title), and shift every other heading
+                # down so they nest correctly under `#### mnemos-…`. The
+                # mapping is: H2 -> H5, H3 -> H6, etc.
+                | awk '
+                    /^# /  { sub(/^# /, ""); print; next }
+                    /^## / { sub(/^## /, "##### "); print; next }
+                    /^### / { sub(/^### /, "###### "); print; next }
+                    /^#### / { sub(/^#### /, "####### "); print; next }
+                      { print }
+                    '
                 echo
               }
             done
@@ -516,11 +532,34 @@ jobs:
             fail=1
           fi
 
-          # 2. No duplicated image refs.
-          dups="$(grep -oE '`ghcr\.io/[^`]+`' release-notes.md | sort | uniq -d || true)"
-          if [[ -n "$dups" ]]; then
-            echo "::error::Duplicate image refs in release notes:"
-            echo "$dups"
+          # 2. No duplicate image refs *within the same section*. The same
+          #    image can appear in both "Services in this release" and
+          #    "Docker images", but never twice in one section.
+          dup_in_section="$(awk '
+            /^### / {
+              if (section != "") {
+                for (i in seen) {
+                  if (seen[i] > 1) print section ": " i
+                }
+              }
+              section = $0; delete seen; next
+            }
+            /`ghcr\.io\/[^`]+`/ {
+              match($0, /`ghcr\.io\/[^`]+`/);
+              ref = substr($0, RSTART+1, RLENGTH-2);
+              seen[ref]++
+            }
+            END {
+              if (section != "") {
+                for (i in seen) {
+                  if (seen[i] > 1) print section ": " i
+                }
+              }
+            }
+          ' release-notes.md || true)"
+          if [[ -n "$dup_in_section" ]]; then
+            echo "::error::Duplicate image refs within a section:"
+            echo "$dup_in_section"
             fail=1
           fi
 
@@ -536,9 +575,9 @@ jobs:
 
           # 4. Every `#### mnemos-<svc>` heading must have at least one
           #    non-blank line after it.
-          for note in /tmp/notes/*.md; do
-            [[ -s "$note" ]] || continue
-            svc="$(basename "$note" .md)"
+          for note in /tmp/notes/*.json; do
+            [[ -f "$note" ]] || continue
+            svc="$(jq -r '.service' "$note")"
             awk -v s="#### mnemos-${svc}" '
               $0 == s {f=1; next}
               /^#### / {f=0}

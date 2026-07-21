@@ -5,17 +5,17 @@ services:
   # ---------------------------------------------------------------------------
   mnemos-vector-db:
     image: pgvector/pgvector:pg18
-    container_name: mnemos-vector-db
+    container_name: dev-mnemos-vector-db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: mnemos_vectors
+      POSTGRES_DB: dev_mnemos_vectors
       POSTGRES_USER: mnemos
       POSTGRES_PASSWORD: mnemos-pgvector-changeme
     volumes:
-      - pgvector_data:/var/lib/postgresql
+      - dev_pgvector_data:/var/lib/postgresql
       - ./pgvector-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U mnemos -d mnemos_vectors"]
+      test: ["CMD-SHELL", "pg_isready -U mnemos -d dev_mnemos_vectors"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -26,10 +26,11 @@ services:
   # Mnemos backend (Headless API + InsightFace CPU + crop storage)
   # ---------------------------------------------------------------------------
   mnemos-backend:
+    image: dev-mnemos-backend:local
     build:
       context: ./mnemos-backend
       dockerfile: Dockerfile
-    container_name: mnemos-backend
+    container_name: dev-mnemos-backend
     restart: unless-stopped
     depends_on:
       mnemos-vector-db:
@@ -37,7 +38,7 @@ services:
     environment:
       MNEMOS_DB_PATH: /data/backend.db
       MNEMOS_CROPS_DIR: /data/crops
-      MNEMOS_VECTOR_DSN: postgresql://mnemos:mnemos-pgvector-changeme@mnemos-vector-db:5432/mnemos_vectors
+      MNEMOS_VECTOR_DSN: postgresql://mnemos:mnemos-pgvector-changeme@mnemos-vector-db:5432/dev_mnemos_vectors
       MNEMOS_DEFAULT_MODEL: buffalo_s
       MNEMOS_DET_SIZE: 640
       MNEMOS_MIN_FACE_PX: 30
@@ -46,7 +47,7 @@ services:
       MNEMOS_API_PORT: 8000
       MNEMOS_CORS_ORIGINS: http://mnemos-frontend:8080,http://localhost:8080
     volumes:
-      - backend_data:/data
+      - dev_backend_data:/data
     ports:
       - "8000:8000"
     healthcheck:
@@ -60,10 +61,11 @@ services:
   # Mnemos frontend (Server-rendered management UI)
   # ---------------------------------------------------------------------------
   mnemos-frontend:
+    image: dev-mnemos-frontend:local
     build:
       context: ./mnemos-frontend
       dockerfile: Dockerfile
-    container_name: mnemos-frontend
+    container_name: dev-mnemos-frontend
     restart: unless-stopped
     depends_on:
       mnemos-backend:
@@ -77,7 +79,7 @@ services:
       MNEMOS_FE_LISTEN_PORT: 8080
       MNEMOS_FE_SECRET: change-me-please-rotate-on-first-run-32bytes
     volumes:
-      - frontend_data:/data
+      - dev_frontend_data:/data
     ports:
       - "8080:8080"
     healthcheck:
@@ -88,6 +90,6 @@ services:
       start_period: 30s
 
 volumes:
-  pgvector_data:
-  backend_data:
-  frontend_data:
+  dev_pgvector_data:
+  dev_backend_data:
+  dev_frontend_data:

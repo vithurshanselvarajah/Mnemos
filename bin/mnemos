@@ -29,7 +29,11 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-PROJECT_PREFIX="mnemos"
+# The dev compose file tags every image/container/volume with the explicit
+# "dev-mnemos-" prefix so it is impossible to accidentally remove a
+# production "ghcr.io/vithurshanselvarajah/mnemos-*" image. This prefix
+# is the single source of truth for what the script considers "dev-only".
+PROJECT_PREFIX="dev-mnemos"
 # This script is for DEV work. It always uses the dev compose file which
 # builds images from the local source tree, never the production compose
 # file (which pulls prebuilt images from GHCR).
@@ -60,12 +64,13 @@ confirm() {
 }
 
 list_mnemos_images() {
-    # The dev images built by `docker compose -f docker-compose.dev.yml` get
-    # the compose project name prepended to their tag, e.g. "mnemosv2-mnemos-backend".
-    # Production images live under "ghcr.io/vithurshanselvarajah/mnemos-*" and
-    # are intentionally NOT managed by this script.
+    # Dev images are tagged explicitly by docker-compose.dev.yml, e.g.
+    # "dev-mnemos-backend:local". Production images live under
+    # "ghcr.io/vithurshanselvarajah/mnemos-*" and are intentionally NOT
+    # managed by this script — the "dev-" prefix keeps us from ever
+    # touching them.
     docker images --format '{{.Repository}}:{{.Tag}} {{.ID}}' \
-        | awk -v pfx="${PROJECT_PREFIX}v2-" '
+        | awk -v pfx="${PROJECT_PREFIX}-" '
             $1 ~ ("^" pfx) { print $2 }
         ' \
         | sort -u
@@ -73,7 +78,7 @@ list_mnemos_images() {
 
 list_mnemos_volumes() {
     docker volume ls --format '{{.Name}}' \
-        | awk -v pfx="$PROJECT_PREFIX" '$0 ~ pfx { print }' \
+        | awk -v pfx="$PROJECT_PREFIX" '$0 ~ ("^" pfx) { print }' \
         | sort -u
 }
 
@@ -158,7 +163,17 @@ delete_images() {
     say "The following $n Mnemos image(s) will be removed:"
     list_mnemos_images | sed 's/^/  /'
     confirm "Proceed?" || { say "Aborted."; return 0; }
+    # Stop the stack first so the images aren't still referenced by running
+    # containers (otherwise `docker rmi -f` errors out with "image is being
+    # used by running container"). Compose's own teardown is fine.
     "${COMPOSE[@]}" down --remove-orphans >/dev/null 2>&1 || true
+    # Belt-and-braces: any container still bound to the project prefix.
+    local leftover
+    leftover=$(list_mnemos_containers | awk '$2 != "" { print $1 }' || true)
+    if [[ -n "$leftover" ]]; then
+        # shellcheck disable=SC2086
+        echo "$leftover" | xargs -r docker rm -f >/dev/null 2>&1 || true
+    fi
     list_mnemos_images | xargs -r docker rmi -f
     say "Removed $n image(s)."
 }
@@ -181,13 +196,44 @@ delete_data() {
 
 delete_all() {
     require_docker
-    say "Stopping containers, removing images, removing volumes…"
-    "${COMPOSE[@]}" down --volumes --remove-orphans --rmi all >/dev/null 2>&1 || true
+    warn "This will permanently delete all Mnemos images, volumes, and containers."
+    confirm "Proceed?" || { say "Aborted."; return 0; }
+
+    say "Stopping Mnemos containers…"
+    # Stop explicitly by ID so we never race with `docker compose down` while
+    # it tears images down. Compose's own teardown is run *after* this so
+    # `down` doesn't have to fight a running container.
+    local running_ids
+    running_ids=$(list_mnemos_containers | awk '$2 != "" { print $1 }' || true)
+    if [[ -n "$running_ids" ]]; then
+        # shellcheck disable=SC2086
+        echo "$running_ids" | xargs -r docker stop >/dev/null 2>&1 || true
+    fi
+
+    say "Tearing down compose stack (removing volumes + orphans)…"
+    "${COMPOSE[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
+
+    # Belt-and-braces: kill any container still bound to the project prefix
+    # (e.g. orphans from older runs, or one created outside compose).
+    running_ids=$(list_mnemos_containers | awk '$2 != "" { print $1 }' || true)
+    if [[ -n "$running_ids" ]]; then
+        # shellcheck disable=SC2086
+        echo "$running_ids" | xargs -r docker rm -f >/dev/null 2>&1 || true
+    fi
+
     local imgs vols
     imgs=$(list_mnemos_images)
     vols=$(list_mnemos_volumes)
-    if [[ -n "$imgs" ]]; then echo "$imgs" | xargs -r docker rmi -f; fi
-    if [[ -n "$vols" ]]; then echo "$vols" | xargs -r docker volume rm; fi
+    if [[ -n "$imgs" ]]; then
+        say "Removing Mnemos images…"
+        # shellcheck disable=SC2086
+        echo "$imgs" | xargs -r docker rmi -f
+    fi
+    if [[ -n "$vols" ]]; then
+        say "Removing Mnemos volumes…"
+        # shellcheck disable=SC2086
+        echo "$vols" | xargs -r docker volume rm
+    fi
     say "Mnemos is fully removed from this host."
 }
 

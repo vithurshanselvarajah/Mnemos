@@ -14,11 +14,13 @@
       <td style="text-align:right; white-space:nowrap">
         {% if is_admin %}
         {% if not k.revoked_at %}
-          <button class="btn ghost sm" hx-post="/backend/keys/{{ k.id }}/revoke"
-                  hx-on::after-request="htmx.ajax('GET', '/partials/keys', {target:'#keys-list', swap:'outerHTML'})">Revoke</button>
+          <button class="btn ghost sm" hx-post="/partials/keys/{{ k.id }}/revoke"
+                  hx-target="#keys-list"
+                  hx-swap="innerHTML">Revoke</button>
         {% endif %}
-        <button class="btn ghost sm" hx-delete="/backend/keys/{{ k.id }}"
-                hx-on::after-request="htmx.ajax('GET', '/partials/keys', {target:'#keys-list', swap:'outerHTML'})"
+        <button class="btn ghost sm" hx-delete="/partials/keys/{{ k.id }}"
+                hx-target="#keys-list"
+                hx-swap="innerHTML"
                 hx-confirm="Delete this key?">Delete</button>
         {% endif %}
       </td>

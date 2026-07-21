@@ -104,8 +104,7 @@
           this.newKey = data;
           this.copyState = 'idle';
           this.form.name = '';
-          // Refresh the keys list partial so the new key shows up.
-          htmx.ajax('GET', '/partials/keys', { target: '#keys-list', swap: 'outerHTML' });
+          htmx.ajax('GET', '/partials/keys', { target: '#keys-list', swap: 'innerHTML' });
         } catch (e) {
           this.error = `Network error: ${e.message || e}`;
         } finally {

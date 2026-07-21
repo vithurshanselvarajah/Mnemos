@@ -206,7 +206,8 @@ def _match(embedding: np.ndarray, model: str, base_threshold: float) -> Identify
         "detection. Recognized faces include the matched person, confidence, and a base64 data URL "
         "of the cropped face. Unknown faces are saved to disk and returned with a `crop_id` for "
         "later assignment via `/api/v1/faces/assign`. Within-request duplicates and re-uploads of "
-        "the same image are deduplicated."
+        "the same image are deduplicated. The active model must be loaded (see `GET /healthz`); "
+        "if not, call `GET /api/v1/models/warmup` first and wait for the `warmup.done` WebSocket event."
     ),
 )
 async def identify(request: Request, file: UploadFile = File(...)) -> IdentifyResponse:

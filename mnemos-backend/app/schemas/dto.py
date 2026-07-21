@@ -88,21 +88,23 @@ class IgnoreRequest(BaseModel):
 
 
 class ModelInfo(BaseModel):
-    name: str
-    loaded: bool = False
-    embedding_dim: int
-    det_size: int
-    reindex_in_progress: bool
-    reindex_total: int = 0
-    reindex_done: int = 0
-    download_active: bool = False
-    download_model: str | None = None
-    download_done: int = 0
-    download_total: int = 0
+
+    name: str = Field(description="Currently persisted model name (e.g. `buffalo_s`).")
+    loaded: bool = Field(description="True when the model weights are loaded into memory and ready to embed.")
+    embedding_dim: int = Field(description="Dimensionality of the embedding vectors produced by the model.")
+    det_size: int = Field(description="Detector input side length in pixels (e.g. 640).")
+    reindex_in_progress: bool = Field(description="True while a switch-and-reindex job is running.")
+    reindex_total: int = Field(description="Total number of crops that will be re-embedded.")
+    reindex_done: int = Field(description="Number of crops already re-embedded.")
+    download_active: bool = Field(description="True while model weights are being downloaded.")
+    download_model: str | None = Field(description="Name of the model currently being downloaded, if any.")
+    download_done: int = Field(description="Bytes downloaded so far for the current download.")
+    download_total: int = Field(description="Total bytes to download for the current model.")
 
 
 class ModelSwitchRequest(BaseModel):
-    name: str
+
+    name: str = Field(description="Target model name. One of `buffalo_s` or `buffalo_l`.")
 
 
 class ApiKeyOut(BaseModel):
@@ -138,12 +140,19 @@ class PairResponse(BaseModel):
 
 
 class HealthOut(BaseModel):
-    status: str
-    version: str
-    model: str | None = None
-    model_loaded: bool = False
-    db: bool
-    vector_db: bool
-    reindex_in_progress: bool
-    reindex_done: int
-    reindex_total: int
+
+    status: str = Field(
+        description="`ok` only when the database, vector DB, and model are all healthy. "
+        "`degraded` otherwise (e.g. model not loaded)."
+    )
+    version: str = Field(description="Backend version string.")
+    model: str | None = Field(description="Currently persisted model name, or null if unset.")
+    model_loaded: bool = Field(
+        description="True when the detection model is loaded into memory. "
+        "False after a failed download or while a warmup is pending."
+    )
+    db: bool = Field(description="True if the local SQLite database is reachable.")
+    vector_db: bool = Field(description="True if the pgvector database is reachable.")
+    reindex_in_progress: bool = Field(description="True while a switch-and-reindex is running.")
+    reindex_done: int = Field(description="Crops re-embedded so far.")
+    reindex_total: int = Field(description="Total crops to re-embed, or 0 when idle.")

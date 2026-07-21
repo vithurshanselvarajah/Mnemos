@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.api.deps import require_full_admin
 from app.core.config import settings
@@ -17,9 +17,16 @@ log = logging.getLogger("mnemos.models")
 
 
 class WarmupOut(BaseModel):
-    name: str
-    loaded: bool
-    already_loaded: bool
+
+    name: str = Field(description="Model name that was requested to load.")
+    loaded: bool = Field(
+        description="True if the model is already loaded and ready to embed. "
+        "False means a background warmup was started; subscribe to the WebSocket "
+        "for `warmup.done` / `warmup.error`."
+    )
+    already_loaded: bool = Field(
+        description="True when the model was already in memory at request time (no background work scheduled)."
+    )
 
 
 @router.get(
@@ -30,7 +37,10 @@ class WarmupOut(BaseModel):
     description=(
         "Returns the currently persisted model name, whether it is loaded into memory, "
         "embedding dimension, detector input size, and live reindex/download progress. "
-        "Used by the dashboard to surface health and by the models page to render status."
+        "Used by the dashboard to surface health and by the models page to render status. "
+        "`loaded=false` means the model needs a warmup before `/identify` can be served. "
+        "`download_active=true` while weights are being fetched; `download_done`/`download_total` "
+        "expose byte progress."
     ),
 )
 def current_model_info() -> ModelInfo:

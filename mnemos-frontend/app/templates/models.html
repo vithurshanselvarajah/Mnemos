@@ -10,7 +10,10 @@
 
 <div class="card">
   <h3>Active model</h3>
-  <div hx-get="/partials/reindex-status" hx-trigger="load, every 2s" hx-swap="outerHTML">
+  <div id="reindex-status"
+       hx-get="/partials/reindex-status"
+       hx-trigger="load, every 2s"
+       hx-swap="innerHTML">
     <p class="muted">Loading…</p>
   </div>
 </div>
@@ -47,15 +50,7 @@
           <strong>Switching to <code x-text="target"></code>…</strong>
         </div>
         <div class="model-result__hint muted" x-show="phase === 'preparing'">
-          Downloading model weights
-          <span x-text="downloadLabel"></span>
-        </div>
-        <div class="model-result__progress" x-show="phase === 'preparing'">
-          <div class="model-result__bar">
-            <div class="model-result__bar-fill"
-                 :class="{ indeterminate: !downloadTotal }"
-                 :style="downloadBarStyle"></div>
-          </div>
+          See download progress above.
         </div>
         <div class="model-result__hint muted" x-show="phase === 'reindexing'">
           <span x-show="reindexTotal">
@@ -78,6 +73,21 @@
 </div>
 
 <script>
+  (function setupWarmupListener() {
+    function refreshStatus() {
+      try {
+        const el = document.getElementById('reindex-status');
+        if (el && window.htmx) htmx.trigger(el, 'load');
+      } catch (_) {}
+    }
+    document.addEventListener('ws:warmup.done', refreshStatus);
+    document.addEventListener('ws:warmup.error', refreshStatus);
+    document.addEventListener('ws:reindex.download', refreshStatus);
+    document.addEventListener('ws:reindex.start', refreshStatus);
+    document.addEventListener('ws:reindex.done', refreshStatus);
+    document.addEventListener('ws:reindex.error', refreshStatus);
+  })();
+
   window.modelSwitcher = function modelSwitcher() {
     return {
       target: 'buffalo_s',
@@ -155,11 +165,8 @@
           this.reindexDone = 0;
           this.reindexTotal = 0;
           try {
-            const el = document.querySelector('[hx-get="/partials/reindex-status"]');
-            if (el) {
-              el.setAttribute('hx-trigger', 'load, every 2s');
-              if (window.htmx) htmx.trigger(el, 'load');
-            }
+            const el = document.getElementById('reindex-status');
+            if (el && window.htmx) htmx.trigger(el, 'load');
           } catch (_) {}
         });
         document.addEventListener('ws:reindex.error', (e) => {
@@ -196,7 +203,7 @@
             return;
           }
           try {
-            const el = document.querySelector('[hx-get="/partials/reindex-status"]');
+            const el = document.getElementById('reindex-status');
             if (el && window.htmx) htmx.trigger(el, 'load');
           } catch (_) {}
         } catch (e) {

@@ -1,7 +1,51 @@
-{% if info.reindex_in_progress %}
+{% if info.reindex_in_progress and info.download_active %}
+  <span class="status warn">Switching &amp; re-indexing</span>
+  <p class="muted">
+    Downloading <code>{{ info.download_model or info.name }}</code>:
+    {% if info.download_total %}
+      <span data-dl-pct>{{ (100 * info.download_done / info.download_total) | int }}%</span>
+      ({{ (info.download_done / 1048576) | round(1) }} MB / {{ (info.download_total / 1048576) | round(1) }} MB)
+    {% else %}
+      preparing download…
+    {% endif %}
+  </p>
+  <div class="progress" style="margin-top:.5rem">
+    <div class="bar"
+         {% if info.download_total %}
+           style="width: {{ (100 * info.download_done / info.download_total) | int }}%"
+         {% else %}
+           style="width: 100%"
+         {% endif %}></div>
+  </div>
+{% elif info.download_active %}
+  <span class="status warn">Downloading</span>
+  <p class="muted" style="margin:.25rem 0 0">
+    Model <code>{{ info.download_model or info.name }}</code>:
+    {% if info.download_total %}
+      <span data-dl-pct>{{ (100 * info.download_done / info.download_total) | int }}%</span>
+      (<span data-dl-done>{{ (info.download_done / 1048576) | round(1) }}</span> / {{ (info.download_total / 1048576) | round(1) }} MB)
+    {% else %}
+      preparing download…
+    {% endif %}
+  </p>
+  <div class="progress" style="margin-top:.5rem">
+    <div class="bar"
+         {% if info.download_total %}
+           style="width: {{ (100 * info.download_done / info.download_total) | int }}%"
+         {% else %}
+           style="width: 100%"
+         {% endif %}></div>
+  </div>
+{% elif info.reindex_in_progress %}
   <span class="status warn">Re-indexing</span>
   <p class="muted">{{ info.reindex_done }} / {{ info.reindex_total }} crops (model <code>{{ info.name }}</code>)</p>
   <div class="progress" style="margin-top:.5rem"><div class="bar" style="width: {{ (100 * info.reindex_done / (info.reindex_total or 1)) | int }}%"></div></div>
+{% elif info.loaded is defined and not info.loaded %}
+  <span class="status error">Not loaded</span>
+  <p class="muted" style="margin:.25rem 0 0">Model <code>{{ info.name }}</code> failed to load. Check the backend logs — usually a network issue downloading the weights from <code>github.com</code>.</p>
+  <p style="margin:.5rem 0 0">
+    <a class="btn ghost sm" href="/models" data-method="retry-warmup" onclick="event.preventDefault(); fetch('/backend/models/warmup', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin'});">Retry warmup</a>
+  </p>
 {% else %}
   <span class="status ok">Active</span>
   <p class="muted" style="margin:.25rem 0 0">Model <code>{{ info.name }}</code> · {{ info.embedding_dim }}-d embeddings · det {{ info.det_size }}</p>

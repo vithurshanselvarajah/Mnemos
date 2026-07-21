@@ -35,5 +35,13 @@ async def lifespan(app: FastAPI):
     except RuntimeError as e:
         log.warning("could not bind websocket hub loop: %s", e)
     log.info("master key ready; active model=%s", settings.default_model)
+    try:
+        from app.services.reindex import active_model, start_warmup
+
+        model = active_model()
+        log.info("auto-loading active model on startup: %s", model)
+        start_warmup(model)
+    except Exception as e:
+        log.warning("could not kick off startup warmup: %s", e)
     yield
     log.info("mnemos-backend shutting down")

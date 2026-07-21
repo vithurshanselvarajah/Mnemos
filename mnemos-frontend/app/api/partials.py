@@ -58,7 +58,10 @@ def partial_inbox_count(request: Request):
 @router.get("/reindex-status", response_class=HTMLResponse)
 def partial_reindex_status(request: Request):
     r = get_sync("/api/v1/models")
-    info = r.json() if r.status_code == 200 else {}
+    if r.status_code == 200:
+        info = r.json()
+    else:
+        info = {"name": "unknown", "loaded": False, "reindex_in_progress": False, "reindex_done": 0, "reindex_total": 0, "embedding_dim": 0, "det_size": 0}
     return render(templates, request, "partials/reindex_status.html", {"info": info})
 
 
@@ -117,7 +120,12 @@ def partial_keys_list(request: Request):
     _require_admin(request)
     r = get_sync("/api/v1/keys")
     keys = r.json() if r.status_code == 200 else []
-    return render(templates, request, "partials/keys_list.html", {"keys": keys})
+    return render(
+        templates,
+        request,
+        "partials/keys_list.html",
+        {"keys": keys, "is_admin": True},
+    )
 
 
 @router.post("/keys", response_class=HTMLResponse)
@@ -131,6 +139,28 @@ async def partial_keys_create(request: Request):
     if not payload["name"]:
         return HTMLResponse("<div class='error'>name is required</div>", status_code=400)
     r = post_sync("/api/v1/keys", json=payload)
+    if r.status_code >= 400:
+        return HTMLResponse(f"<div class='error'>{r.text}</div>", status_code=r.status_code)
+    return partial_keys_list(request)
+
+
+@router.post("/keys/{key_id}/revoke", response_class=HTMLResponse)
+def partial_keys_revoke(key_id: str, request: Request):
+    _require_admin(request)
+    from app.services.backend_client import request as _req
+
+    r = _req("POST", f"/api/v1/keys/{key_id}/revoke")
+    if r.status_code >= 400:
+        return HTMLResponse(f"<div class='error'>{r.text}</div>", status_code=r.status_code)
+    return partial_keys_list(request)
+
+
+@router.delete("/keys/{key_id}", response_class=HTMLResponse)
+def partial_keys_delete(key_id: str, request: Request):
+    _require_admin(request)
+    from app.services.backend_client import request as _req
+
+    r = _req("DELETE", f"/api/v1/keys/{key_id}")
     if r.status_code >= 400:
         return HTMLResponse(f"<div class='error'>{r.text}</div>", status_code=r.status_code)
     return partial_keys_list(request)
@@ -152,6 +182,7 @@ def partial_persons_list(request: Request):
 
 @router.post("/persons", response_class=HTMLResponse)
 async def partial_persons_create(request: Request):
+    _require_admin(request)
     form = await request.form()
     name = (form.get("name") or "").strip()
     threshold = form.get("custom_threshold") or None
@@ -169,6 +200,7 @@ async def partial_persons_create(request: Request):
 
 @router.patch("/persons/{person_id}", response_class=HTMLResponse)
 async def partial_persons_patch(person_id: str, request: Request):
+    _require_admin(request)
     from app.services.backend_client import request as _req
 
     form = await request.form()
@@ -190,6 +222,7 @@ async def partial_persons_patch(person_id: str, request: Request):
 
 @router.delete("/persons/{person_id}", response_class=HTMLResponse)
 def partial_persons_delete(person_id: str, request: Request):
+    _require_admin(request)
     from app.services.backend_client import request as _req
 
     r = _req("DELETE", f"/api/v1/persons/{person_id}")

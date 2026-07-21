@@ -1,4 +1,4 @@
-name: Release
+name: Release All
 
 on:
   workflow_dispatch:
@@ -206,6 +206,8 @@ jobs:
 
       - name: Create manifest list and push
         working-directory: /tmp/digests
+        env:
+          DOCKER_METADATA_OUTPUT_JSON: ${{ steps.meta.outputs.json }}
         run: |
           set -euo pipefail
 
@@ -237,12 +239,9 @@ jobs:
           else
             range="HEAD"
           fi
-          {
-            echo "commits<<EOF"
-            git log "$range" --pretty=format:"- %s (%h)%n%b" --name-only --no-merges -- "mnemos-${{ matrix.service }}"
-            echo
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+          
+          # Write directly to a file to prevent shell expansion issues
+          git log "$range" --pretty=format:"- %s (%h)%n%b" --name-only --no-merges -- "mnemos-${{ matrix.service }}" > /tmp/commits.txt
 
       - name: Generate changelog with GitHub AI
         id: ai_changelog
@@ -259,26 +258,25 @@ jobs:
             Create release notes for mnemos-${{ matrix.service }}.
 
             Commits:
-            ${{ steps.commits.outputs.commits }}
+            $(cat /tmp/commits.txt)
 
       - name: Write release notes
         env:
           AI_NOTES_FILE: ${{ steps.ai_changelog.outputs.response-file }}
-          COMMITS: ${{ steps.commits.outputs.commits }}
         run: |
           set -euo pipefail
           {
-            # Sentinel that the aggregator splits on. Anything before this
-            # marker is user-visible release content; anything after is the
-            # per-service docker pull footer (re-rendered by the
-            # aggregator).
             echo "<!-- MNEMOS-RELEASE-CONTENT-START -->"
             if [[ -n "${AI_NOTES_FILE:-}" && -s "$AI_NOTES_FILE" ]]; then
               cat "$AI_NOTES_FILE"
+            elif [[ -s /tmp/commits.txt ]]; then
+              echo "## Changes"
+              echo
+              cat /tmp/commits.txt
             else
               echo "## Changes"
               echo
-              echo "${COMMITS:-"- Maintenance release"}"
+              echo "- Maintenance release"
             fi
             echo "<!-- MNEMOS-RELEASE-CONTENT-END -->"
             echo
@@ -364,7 +362,6 @@ jobs:
           else
             stripped="${last#v}"
             IFS='.' read -r major minor patch <<< "${stripped}"
-            # Normalise empty/non-numeric components.
             [[ "${major:-0}" =~ ^[0-9]+$ ]] || major=0
             [[ "${minor:-0}" =~ ^[0-9]+$ ]] || minor=0
             [[ "${patch:-0}" =~ ^[0-9]+$ ]] || patch=0
@@ -388,7 +385,6 @@ jobs:
           rm -rf /tmp/notes
           mkdir -p /tmp/notes
 
-          # Layout A: each artifact is its own sub-directory (merge-multiple=false).
           if compgen -G '/tmp/bundles/bundle-mnemos-*' >/dev/null; then
             for dir in /tmp/bundles/bundle-mnemos-*; do
               [[ -d "$dir" ]] || continue
@@ -397,11 +393,6 @@ jobs:
               [[ -s "$dir/service-info.json" ]] && cp "$dir/service-info.json" "/tmp/notes/${svc}.json"
             done
           else
-            # Layout B: all files flattened into a single directory.
-            # Pair each service-info.json with the release-notes.md that
-            # sits next to it (the per-service release job uploads them
-            # together). If there is exactly one of each, we can match
-            # them by index after sorting.
             mapfile -t infos < <(find /tmp/bundles -maxdepth 1 -name 'service-info.json' | sort)
             mapfile -t notes < <(find /tmp/bundles -maxdepth 1 -name 'release-notes.md'   | sort)
             if [[ "${#infos[@]}" -ne "${#notes[@]}" ]]; then
@@ -451,23 +442,16 @@ jobs:
               {
                 echo "#### mnemos-${svc}"
                 echo
-                # Extract the per-service content between the sentinel
-                # markers (anything after the END marker is the per-service
-                # docker-pull footer, which we re-render below).
-                sed -n '/<!-- MNEMOS-RELEASE-CONTENT-START -->/,/<!-- MNEMOS-RELEASE-CONTENT-END -->/p' \
-                  "$note" \
-                  | sed '1d;$d' \
-                  # Rebase heading levels: drop the document H1 (we have our
-                  # own `## Mnemos …` title), and shift every other heading
-                # down so they nest correctly under `#### mnemos-…`. The
-                # mapping is: H2 -> H5, H3 -> H6, etc.
-                | awk '
+                sed -n '/<!-- MNEMOS-RELEASE-CONTENT-START -->/,/<!-- MNEMOS-RELEASE-CONTENT-END -->/p' "$note" \
+                  | sed -e '1d' -e '$d' \
+                  | awk '
+                    BEGIN { }
                     /^# /  { sub(/^# /, ""); print; next }
                     /^## / { sub(/^## /, "##### "); print; next }
                     /^### / { sub(/^### /, "###### "); print; next }
                     /^#### / { sub(/^#### /, "####### "); print; next }
-                      { print }
-                    '
+                    { print }
+                  '
                 echo
               }
             done
@@ -484,8 +468,8 @@ jobs:
             echo "### Install / upgrade"
             echo
             echo '```bash'
-            echo "curl -L https://github.com/${{ github.repository }}/releases/download/${NEXT_VERSION}/docker-compose.yml -o docker-compose.yml"
-            echo "curl -L https://github.com/${{ github.repository }}/releases/download/${NEXT_VERSION}/.env.example -o .env.example"
+            echo "curl -L [https://github.com/$](https://github.com/$){{ github.repository }}/releases/download/${NEXT_VERSION}/docker-compose.yml -o docker-compose.yml"
+            echo "curl -L [https://github.com/$](https://github.com/$){{ github.repository }}/releases/download/${NEXT_VERSION}/.env.example -o .env.example"
             echo "cp .env.example .env   # then edit secrets"
             echo "docker compose pull && docker compose up -d"
             echo '```'
@@ -496,10 +480,6 @@ jobs:
         run: |
           set -euo pipefail
           tmp="$(mktemp)"
-          # Walk the file once, dropping any line that exactly matches an
-          # earlier line in the *same* section. We treat the first blank
-          # line after a heading as the start of a new section, so headings
-          # themselves are never compared.
           awk '
             BEGIN { section = "" }
             /^#### / { section = $0; print; next }
@@ -520,7 +500,6 @@ jobs:
           set -euo pipefail
           fail=0
 
-          # 1. Docker images section must have at least one non-blank bullet.
           if grep -q '^### Docker images$' release-notes.md; then
             if ! awk '/^### Docker images$/{f=1;next} /^### /{f=0} f && NF>0' \
                  release-notes.md | grep -q '.'; then
@@ -532,9 +511,6 @@ jobs:
             fail=1
           fi
 
-          # 2. No duplicate image refs *within the same section*. The same
-          #    image can appear in both "Services in this release" and
-          #    "Docker images", but never twice in one section.
           dup_in_section="$(awk '
             /^### / {
               if (section != "") {
@@ -563,7 +539,6 @@ jobs:
             fail=1
           fi
 
-          # 3. Every service's JSON must be mentioned by name.
           for info in /tmp/notes/*.json; do
             [[ -f "$info" ]] || continue
             svc="$(jq -r '.service' "$info")"
@@ -573,8 +548,6 @@ jobs:
             fi
           done
 
-          # 4. Every `#### mnemos-<svc>` heading must have at least one
-          #    non-blank line after it.
           for note in /tmp/notes/*.json; do
             [[ -f "$note" ]] || continue
             svc="$(jq -r '.service' "$note")"
@@ -603,9 +576,6 @@ jobs:
           mkdir -p dist
           cp docker-compose.yml dist/docker-compose.yml
           cp .env.example dist/.env.example
-          # Pinned compose: replace the ${MNEMOS_TAG:-latest} reference with
-          # the unified release tag so `docker compose pull` from this
-          # archive always pulls the matching set of images.
           pinned="dist/docker-compose.pinned.yml"
           sed "s/\${MNEMOS_TAG:-latest}/${{ steps.next_version.outputs.next }}/g" \
             docker-compose.yml > "$pinned"
@@ -646,9 +616,6 @@ jobs:
             ver="$(jq -r '.version' "$info")"
             echo "Image tag for ${svc} is unchanged: mnemos-${svc}-v${ver} (stable: mnemos-${svc}:stable)."
           done
-          echo "Per-service image tags (set in _version.py) and the 'stable' tag"
-          echo "are managed by the per-service release jobs; the aggregator only"
-          echo "publishes the unified Mnemos release."
 
       - name: Summary
         env:

@@ -2,131 +2,99 @@ from __future__ import annotations
 
 import logging
 import threading
-from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
+
+from app.providers.base import Detection, ProviderNotAvailable
 
 log = logging.getLogger("mnemos.engine")
 
 
-@dataclass
-class Detection:
-    bbox: tuple[float, float, float, float]
-    score: float
-    embedding: np.ndarray
+def _load_provider(provider: str, model_name: str, det_size: int) -> Any:
+    if provider == "cpu":
+        from app.providers.cpu import CpuEngine
+
+        return CpuEngine(model_name=model_name, det_size=det_size)
+    if provider == "nvidia":
+        from app.providers.nvidia import NvidiaEngine
+
+        return NvidiaEngine(model_name=model_name, det_size=det_size)
+    if provider == "rockchip":
+        from app.providers.rockchip import RockchipEngine
+
+        return RockchipEngine(model_name=model_name, det_size=det_size)
+    raise ProviderNotAvailable(f"unknown MNEMOS_PROVIDER: {provider!r}")
 
 
 class InsightFaceEngine:
     _rw_lock = threading.Condition(threading.RLock())
-    _instance: InsightFaceEngine | None = None
-    _writers = 0
-    _readers = 0
+    _instance: "InsightFaceEngine | None" = None
 
-    def __init__(self, model_name: str, det_size: int) -> None:
+    def __init__(self, model_name: str, det_size: int, provider: str | None = None) -> None:
+        from app.core.config import settings
+
         self._model_name = model_name
         self._det_size = det_size
-        self._app = None
-        self._loaded_name: str | None = None
+        self._provider_name = provider or getattr(settings, "provider", "cpu")
+        self._inner: Any | None = None
+        self._loaded_provider: str | None = None
 
     @classmethod
-    def _acquire_read(cls):
-        cond = cls._rw_lock
-        with cond:
-            while cls._writers > 0:
-                cond.wait()
-            cls._readers += 1
-
-    @classmethod
-    def _release_read(cls):
-        cond = cls._rw_lock
-        with cond:
-            cls._readers -= 1
-            if cls._readers == 0:
-                cond.notify_all()
-
-    @classmethod
-    def _acquire_write(cls):
-        cond = cls._rw_lock
-        with cond:
-            while cls._writers > 0 or cls._readers > 0:
-                cond.wait()
-            cls._writers += 1
-
-    @classmethod
-    def _release_write(cls):
-        cond = cls._rw_lock
-        with cond:
-            cls._writers -= 1
-            cond.notify_all()
-
-    @classmethod
-    def current(cls) -> InsightFaceEngine:
+    def current(cls) -> "InsightFaceEngine":
         if cls._instance is None:
             from app.core.config import settings
 
-            cls._instance = InsightFaceEngine(settings.default_model, settings.det_size)
+            cls._instance = InsightFaceEngine(
+                model_name=settings.default_model,
+                det_size=settings.det_size,
+                provider=getattr(settings, "provider", "cpu"),
+            )
         return cls._instance
 
     @classmethod
     def reset(cls) -> None:
-        with cls._lock:
+        with cls._rw_lock:
             cls._instance = None
+
+    def _ensure_inner(self) -> Any:
+        if self._inner is None or self._loaded_provider != self._provider_name:
+            log.info("binding engine to provider=%s", self._provider_name)
+            self._inner = _load_provider(
+                self._provider_name,
+                model_name=self._model_name,
+                det_size=self._det_size,
+            )
+            self._loaded_provider = self._provider_name
+        return self._inner
 
     @property
     def model_name(self) -> str:
         return self._model_name
 
-    def _ensure_loaded(self) -> None:
-        if self._app is not None and self._loaded_name == self._model_name:
-            return
-        from insightface.app import FaceAnalysis
-
-        log.info("loading InsightFace model=%s det_size=%d", self._model_name, self._det_size)
-        self._app = FaceAnalysis(
-            name=self._model_name,
-            allowed_modules=["detection", "recognition"],
-            providers=["CPUExecutionProvider"],
-        )
-        self._app.prepare(ctx_id=0, det_size=(self._det_size, self._det_size))
-        self._loaded_name = self._model_name
+    @property
+    def provider_name(self) -> str:
+        return self._provider_name
 
     def warmup(self) -> bool:
         try:
-            self._ensure_loaded()
-            return True
-        except Exception as e:
-            log.warning("warmup failed: %s", e)
+            return self._ensure_inner().warmup()
+        except ProviderNotAvailable as e:
+            log.error("provider unavailable during warmup: %s", e)
             return False
 
     def is_loaded(self) -> bool:
-        return self._app is not None and self._loaded_name == self._model_name
+        if self._inner is None:
+            return False
+        return self._inner.is_loaded()
 
     def detect(self, bgr_image: np.ndarray) -> list[Detection]:
-        InsightFaceEngine._acquire_read()
-        try:
-            self._ensure_loaded()
-            faces = self._app.get(bgr_image)
-        finally:
-            InsightFaceEngine._release_read()
-        out: list[Detection] = []
-        for f in faces:
-            bbox = tuple(map(float, f.bbox))
-            score = float(getattr(f, "det_score", 1.0))
-            emb = getattr(f, "normed_embedding", None)
-            if emb is None:
-                emb = np.asarray(f.embedding, dtype=np.float32)
-                n = float(np.linalg.norm(emb))
-                if n > 0:
-                    emb = emb / n
-            out.append(Detection(bbox=bbox, score=score, embedding=np.asarray(emb, dtype=np.float32)))
-        return out
+        return self._ensure_inner().detect(bgr_image)
 
     def switch_model(self, new_name: str) -> None:
-        InsightFaceEngine._acquire_write()
-        try:
-            log.info("switching model %s -> %s", self._model_name, new_name)
-            self._model_name = new_name
-            self._app = None
-            self._loaded_name = None
-        finally:
-            InsightFaceEngine._release_write()
+        self._model_name = new_name
+        if self._inner is not None:
+            self._inner.switch_model(new_name)
+
+
+__all__ = ["InsightFaceEngine", "Detection"]

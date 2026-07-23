@@ -22,19 +22,30 @@ from app.core.events import lifespan
 from app.core.logging import configure_logging
 from app.core.middleware import APIKeyAuthMiddleware
 from app.core.version import get_version
+from app.services.model_manifest import preflight_provider
 
 
 def create_app() -> FastAPI:
     configure_logging()
     log = logging.getLogger("mnemos.app")
 
+    preflight_provider()
+
     app = FastAPI(
         title="Mnemos Backend",
         version=get_version(),
         description=(
             "Mnemos is a self-hosted facial recognition API. This service stores face embeddings "
-            "in pgvector, supports multi-model detection (buffalo_s / buffalo_l from InsightFace), "
-            "and exposes a JSON HTTP API for identification, person management, and re-indexing.\n\n"
+            "in pgvector, supports multi-model detection (buffalo_s / buffalo_m / buffalo_l from "
+            "InsightFace) and three inference providers (CPU, NVIDIA CUDA, Rockchip NPU), and "
+            "exposes a JSON HTTP API for identification, person management, and re-indexing.\n\n"
+            "Model weights are downloaded on demand from the upstream manifest at "
+            "`MNEMOS_MANIFEST_URL` (default: the project's GitHub-hosted manifest). Each artifact "
+            "is verified against its SHA-256 before use. Resume is supported via HTTP `Range`.\n\n"
+            "**Providers** — Controlled at deploy time via `MNEMOS_PROVIDER` (`cpu`, `nvidia`, "
+            "`rockchip`). For Rockchip, the SoC is auto-detected from `/proc/device-tree/compatible` "
+            "and can be overridden with `MNEMOS_ROCKCHIP_SOC`. The container will refuse to start "
+            "if the detected SoC has no entry in the manifest.\n\n"
             "**Authentication** — All `/api/v1/*` endpoints require an API key passed as the "
             "`X-API-Key` header. Keys are minted via the frontend pairing flow (`/system/pair`) "
             "or the admin UI. There are two permission levels: `Identify-Only` (can call "
@@ -42,7 +53,8 @@ def create_app() -> FastAPI:
             "and the master key).\n\n"
             "**Realtime updates** — Subscribe to `ws://<host>/ws/events` for `inbox.new_face` "
             "and `inbox.bulk_changed` (live inbox updates) plus `reindex.*` / `warmup.*` events "
-            "during model switches and warmups."
+            "during model switches and warmups. Download events include an `artifact` field with "
+            "the per-file progress."
         ),
         lifespan=lifespan,
         docs_url="/docs",
@@ -56,7 +68,14 @@ def create_app() -> FastAPI:
                 "description": "Manage face crops: assign to people, mark as non-face, ignore.",
             },
             {"name": "persons", "description": "CRUD for known people and their sample crops."},
-            {"name": "models", "description": "Inspect, warmup, and switch the active InsightFace model."},
+            {
+                "name": "models",
+                "description": (
+                    "Inspect, warmup, switch, and list available detection models. "
+                    "`GET /models/available` reflects the active provider — `standard` ONNX "
+                    "variants for CPU/NVIDIA, or the matched `rknn/<soc>` variant for Rockchip."
+                ),
+            },
             {"name": "keys", "description": "Manage API keys (Full-Admin only)."},
             {"name": "system", "description": "Master key, pairing, and bootstrap (Full-Admin only)."},
             {"name": "crops", "description": "Fetch stored face crop JPEGs by crop UUID."},

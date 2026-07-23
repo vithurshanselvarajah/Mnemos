@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     secret: str = Field(default="change-me-please-rotate-on-first-run-32bytes")
     session_cookie_name: str = Field(default="mnemos_sid")
     session_cookie_secure: bool = Field(default=False)
-    backend_request_timeout: float = Field(default=10.0)
+    backend_request_timeout: float = Field(default=60.0)
     backend_ws_timeout: float = Field(default=120.0)
 
 

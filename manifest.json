@@ -1,0 +1,229 @@
+{
+  "manifest_version": "1.0.0",
+  "updated_at": "2026-07-23",
+  "base_url": "https://apps.selvarajah.co.uk",
+  "models": {
+    "buffalo_s": {
+      "standard": {
+        "detection": {
+          "filename": "detection.onnx",
+          "path": "/mnemos/models/buffalo_s/standard/detection.onnx",
+          "size_bytes": 2524817,
+          "sha256": "5e4447f50245bbd7966bd6c0fa52938c61474a04ec7def48753668a9d8b4ea3a"
+        },
+        "recognition": {
+          "filename": "recognition.onnx",
+          "path": "/mnemos/models/buffalo_s/standard/recognition.onnx",
+          "size_bytes": 13616099,
+          "sha256": "9cc6e4a75f0e2bf0b1aed94578f144d15175f357bdc05e815e5c4a02b319eb4f"
+        }
+      },
+      "rknn": {
+        "rk3566": {
+          "detection": {
+            "filename": "detection.rknn",
+            "path": "/mnemos/models/buffalo_s/rknn/rk3566/detection.rknn",
+            "size_bytes": 1597052,
+            "sha256": "ed0e0240bae8eb3ef36fb5a85333b520602896ebe4a5f5f2ff06985125eb9315"
+          },
+          "recognition": {
+            "filename": "recognition.rknn",
+            "path": "/mnemos/models/buffalo_s/rknn/rk3566/recognition.rknn",
+            "size_bytes": 7119471,
+            "sha256": "190a87fbf6127b35b9c1f529bba33daff1a9868f170fe40423ead6cf30e8e73b"
+          }
+        },
+        "rk3568": {
+          "detection": {
+            "filename": "detection.rknn",
+            "path": "/mnemos/models/buffalo_s/rknn/rk3568/detection.rknn",
+            "size_bytes": 1597052,
+            "sha256": "873bb69a0dd897ba216cd7a23ca8812ef0252cb83f6031a658d3a24f2757a7b8"
+          },
+          "recognition": {
+            "filename": "recognition.rknn",
+            "path": "/mnemos/models/buffalo_s/rknn/rk3568/recognition.rknn",
+            "size_bytes": 7119471,
+            "sha256": "77437129a9e3b8a2184c9a1119623d563df1fab43241eabb3c7cdcdc9dc7858f"
+          }
+        },
+        "rk3576": {
+          "detection": {
+            "filename": "detection.rknn",
+            "path": "/mnemos/models/buffalo_s/rknn/rk3576/detection.rknn",
+            "size_bytes": 2163708,
+            "sha256": "3bc69dc9eddc430ce0507d00ec57254ea9d844379b794c134765f67712c8ed8c"
+          },
+          "recognition": {
+            "filename": "recognition.rknn",
+            "path": "/mnemos/models/buffalo_s/rknn/rk3576/recognition.rknn",
+            "size_bytes": 7423983,
+            "sha256": "5d4b63881db18fa71d22936159e670fdcf3c979c61f893ab1f96bda0718b57e6"
+          }
+        },
+        "rk3588": {
+          "detection": {
+            "filename": "detection.rknn",
+            "path": "/mnemos/models/buffalo_s/rknn/rk3588/detection.rknn",
+            "size_bytes": 2160572,
+            "sha256": "2e7ce24c2c483a65b8561c3599c5aec8b77e723c2d241fbfa44da07b0da92127"
+          },
+          "recognition": {
+            "filename": "recognition.rknn",
+            "path": "/mnemos/models/buffalo_s/rknn/rk3588/recognition.rknn",
+            "size_bytes": 7460079,
+            "sha256": "b25c697a09035c7bff7d58915415940be4ef5495faf909fbdb092bdf689a069c"
+          }
+        }
+      }
+    },
+    "buffalo_m": {
+      "standard": {
+        "detection": {
+          "filename": "detection.onnx",
+          "path": "/mnemos/models/buffalo_m/standard/detection.onnx",
+          "size_bytes": 3292009,
+          "sha256": "041f73f47371333d1d17a6fee6c8ab4e6aecabefe398ff32cca4e2d5eaee0af9"
+        },
+        "recognition": {
+          "filename": "recognition.onnx",
+          "path": "/mnemos/models/buffalo_m/standard/recognition.onnx",
+          "size_bytes": 174383860,
+          "sha256": "4c06341c33c2ca1f86781dab0e829f88ad5b64be9fba56e56bc9ebdefc619e43"
+        }
+      },
+      "rknn": {
+        "rk3566": {
+          "detection": {
+            "filename": "detection.rknn",
+            "path": "/mnemos/models/buffalo_m/rknn/rk3566/detection.rknn",
+            "size_bytes": 1940988,
+            "sha256": "1e9fd2327f57547c0cc50d453c7dd3662eb5f0eeffbd6fb719e3d73e4c38b4fd"
+          },
+          "recognition": {
+            "filename": "recognition.rknn",
+            "path": "/mnemos/models/buffalo_m/rknn/rk3566/recognition.rknn",
+            "size_bytes": 84855279,
+            "sha256": "22a7181a6d027edc4116d09b92a867e373d0964d4ce7cbbe197c3e47bc977fe1"
+          }
+        },
+        "rk3568": {
+          "detection": {
+            "filename": "detection.rknn",
+            "path": "/mnemos/models/buffalo_m/rknn/rk3568/detection.rknn",
+            "size_bytes": 1940988,
+            "sha256": "edeaf065b9b66db1d81aff556163a8395c2c70ec865843ca7b9656976f4661fd"
+          },
+          "recognition": {
+            "filename": "recognition.rknn",
+            "path": "/mnemos/models/buffalo_m/rknn/rk3568/recognition.rknn",
+            "size_bytes": 84855279,
+            "sha256": "c2e81bebc556431ae763976f2a492e4fa705207f84748cd1ac562e6ec8cc00dd"
+          }
+        },
+        "rk3576": {
+          "detection": {
+            "filename": "detection.rknn",
+            "path": "/mnemos/models/buffalo_m/rknn/rk3576/detection.rknn",
+            "size_bytes": 2601596,
+            "sha256": "fe25f53c00bdd2f772a30599b0466867d785d5dd8ffcf344558e3a647b3b93c3"
+          },
+          "recognition": {
+            "filename": "recognition.rknn",
+            "path": "/mnemos/models/buffalo_m/rknn/rk3576/recognition.rknn",
+            "size_bytes": 85318511,
+            "sha256": "44adb38a80eee1a81a0c7b31f34adeb7645c265d913ba0dc93d417048d035ca0"
+          }
+        },
+        "rk3588": {
+          "detection": {
+            "filename": "detection.rknn",
+            "path": "/mnemos/models/buffalo_m/rknn/rk3588/detection.rknn",
+            "size_bytes": 2639740,
+            "sha256": "1964c89e0c035355f19835db1788b10e4d4f932a12acf69d52d2fbd12704830f"
+          },
+          "recognition": {
+            "filename": "recognition.rknn",
+            "path": "/mnemos/models/buffalo_m/rknn/rk3588/recognition.rknn",
+            "size_bytes": 85432175,
+            "sha256": "a6df928a8f58218fcf9eae54e7f296cdb4c6934d6943feeeb6a3f3370e5a57b0"
+          }
+        }
+      }
+    },
+    "buffalo_l": {
+      "standard": {
+        "detection": {
+          "filename": "detection.onnx",
+          "path": "/mnemos/models/buffalo_l/standard/detection.onnx",
+          "size_bytes": 16923827,
+          "sha256": "5838f7fe053675b1c7a08b633df49e7af5495cee0493c7dcf6697200b85b5b91"
+        },
+        "recognition": {
+          "filename": "recognition.onnx",
+          "path": "/mnemos/models/buffalo_l/standard/recognition.onnx",
+          "size_bytes": 174383860,
+          "sha256": "4c06341c33c2ca1f86781dab0e829f88ad5b64be9fba56e56bc9ebdefc619e43"
+        }
+      },
+      "rknn": {
+        "rk3566": {
+          "detection": {
+            "filename": "detection.rknn",
+            "path": "/mnemos/models/buffalo_l/rknn/rk3566/detection.rknn",
+            "size_bytes": 8835772,
+            "sha256": "e81a4ddee6cc176ad39953606386a1b1b29edd3c3fb723984b64f843c054c42a"
+          },
+          "recognition": {
+            "filename": "recognition.rknn",
+            "path": "/mnemos/models/buffalo_l/rknn/rk3566/recognition.rknn",
+            "size_bytes": 84855279,
+            "sha256": "3e303e685ff6ffb804843b4fda9c03ef1cafd8796e2312fec1ad1ec5f7564d9e"
+          }
+        },
+        "rk3568": {
+          "detection": {
+            "filename": "detection.rknn",
+            "path": "/mnemos/models/buffalo_l/rknn/rk3568/detection.rknn",
+            "size_bytes": 8835772,
+            "sha256": "5be614eeec507de860c2f87d81517025bafbe0bb7f167257121fa018155343fa"
+          },
+          "recognition": {
+            "filename": "recognition.rknn",
+            "path": "/mnemos/models/buffalo_l/rknn/rk3568/recognition.rknn",
+            "size_bytes": 84855279,
+            "sha256": "5d710eab3e23976dda1568b8a648be66eaa22fabd3e67997158faf9a96c33980"
+          }
+        },
+        "rk3576": {
+          "detection": {
+            "filename": "detection.rknn",
+            "path": "/mnemos/models/buffalo_l/rknn/rk3576/detection.rknn",
+            "size_bytes": 9866684,
+            "sha256": "dadd7e3b2b38b48a0fc20bfe4633aee22f370b015301b75da9ab386014cd0aeb"
+          },
+          "recognition": {
+            "filename": "recognition.rknn",
+            "path": "/mnemos/models/buffalo_l/rknn/rk3576/recognition.rknn",
+            "size_bytes": 85318511,
+            "sha256": "5dd9ee716f812facd57a8dfed7bbcb5e8ce3811832c8b746adcc7e81224963f9"
+          }
+        },
+        "rk3588": {
+          "detection": {
+            "filename": "detection.rknn",
+            "path": "/mnemos/models/buffalo_l/rknn/rk3588/detection.rknn",
+            "size_bytes": 10362364,
+            "sha256": "d50ec1f32557b180d33723c997b00cb6e1028802984bd0a875a496f79cdd2c30"
+          },
+          "recognition": {
+            "filename": "recognition.rknn",
+            "path": "/mnemos/models/buffalo_l/rknn/rk3588/recognition.rknn",
+            "size_bytes": 85432175,
+            "sha256": "038a6440286f58ad62fe477e27f688eb0291b3ba87b8788e18e07941a5d2691f"
+          }
+        }
+      }
+    }
+  }
+}

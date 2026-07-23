@@ -169,6 +169,12 @@ def proxy_model_warmup():
     return Response(content=r.content, status_code=r.status_code, media_type="application/json")
 
 
+@router.get("/models/available")
+def proxy_models_available():
+    r = get_sync("/api/v1/models/available")
+    return Response(content=r.content, status_code=r.status_code, media_type="application/json")
+
+
 @router.get("/inbox")
 def proxy_inbox(page: int = 1, page_size: int = 24):
     r = get_sync(f"/api/v1/faces/unassigned?page={page}&page_size={page_size}")

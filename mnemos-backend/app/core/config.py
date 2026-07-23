@@ -20,6 +20,17 @@ class Settings(BaseSettings):
     min_face_px: int = Field(default=30, ge=8, le=4096)
     default_threshold: float = Field(default=0.40, ge=0.0, le=1.0)
 
+    provider: str = Field(default="cpu")
+
+    manifest_url: str = Field(
+        default="https://raw.githubusercontent.com/vithurshanselvarajah/Mnemos/refs/heads/main/manifest.json"
+    )
+    manifest_fetch_timeout_s: float = Field(default=10.0, ge=1.0, le=60.0)
+    download_timeout_s: float = Field(default=120.0, ge=5.0, le=3600.0)
+    models_root: str = Field(default="/data/models")
+
+    rockchip_soc: str = Field(default="rk3588")
+
     crop_pad_fraction: float = Field(default=0.50, ge=0.0, le=2.0)
 
     embedding_dim: int = Field(default=512)

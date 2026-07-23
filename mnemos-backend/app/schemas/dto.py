@@ -97,12 +97,28 @@ class ModelInfo(BaseModel):
     reindex_done: int = Field(description="Number of crops already re-embedded.")
     download_active: bool = Field(description="True while model weights are being downloaded.")
     download_model: str | None = Field(description="Name of the model currently being downloaded, if any.")
+    download_artifact: str | None = Field(description="Filename of the artifact currently being downloaded, if any.")
     download_done: int = Field(description="Bytes downloaded so far for the current download.")
     download_total: int = Field(description="Total bytes to download for the current model.")
 
 
 class ModelSwitchRequest(BaseModel):
-    name: str = Field(description="Target model name. One of `buffalo_s` or `buffalo_l`.")
+    name: str = Field(description="Target model name. One of `buffalo_s`, `buffalo_m`, or `buffalo_l`.")
+
+
+class ModelArtifactOut(BaseModel):
+    filename: str
+    size_bytes: int
+    sha256: str
+    local_path: str
+    present: bool
+
+
+class ModelAvailable(BaseModel):
+    name: str
+    kind: str
+    ready: bool
+    artifacts: list[ModelArtifactOut]
 
 
 class ApiKeyOut(BaseModel):
@@ -153,3 +169,9 @@ class HealthOut(BaseModel):
     reindex_in_progress: bool = Field(description="True while a switch-and-reindex is running.")
     reindex_done: int = Field(description="Crops re-embedded so far.")
     reindex_total: int = Field(description="Total crops to re-embed, or 0 when idle.")
+    provider: str = Field(
+        description="Active inference provider: `cpu`, `nvidia`, or `rockchip`."
+    )
+    rockchip_soc: str | None = Field(
+        description="Detected (or overridden) Rockchip SoC. `null` when the provider is not Rockchip."
+    )

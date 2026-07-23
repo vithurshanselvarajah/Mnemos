@@ -21,16 +21,18 @@ services:
       retries: 10
 
   # ---------------------------------------------------------------------------
-  # Mnemos backend (Headless API + InsightFace CPU + crop storage)
+  # Mnemos backend (Headless API + InsightFace provider-aware: cpu/nvidia/rockchip)
+  # Override MNEMOS_PROVIDER at deploy time to switch inference backend.
   # ---------------------------------------------------------------------------
   mnemos-backend:
-    image: ghcr.io/vithurshanselvarajah/mnemos-backend:${MNEMOS_TAG:-latest}
+    image: ghcr.io/vithurshanselvarajah/mnemos-backend:${MNEMOS_TAG:-latest}-${MNEMOS_PROVIDER:-cpu}
     container_name: mnemos-backend
     restart: unless-stopped
     depends_on:
       mnemos-vector-db:
         condition: service_healthy
     environment:
+      MNEMOS_PROVIDER: ${MNEMOS_PROVIDER:-cpu}
       MNEMOS_DB_PATH: /data/backend.db
       MNEMOS_CROPS_DIR: /data/crops
       MNEMOS_VECTOR_DSN: postgresql://mnemos:${MNEMOS_PG_PASSWORD:-mnemos-pgvector-changeme}@mnemos-vector-db:5432/mnemos_vectors

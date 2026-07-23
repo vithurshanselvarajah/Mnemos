@@ -73,6 +73,16 @@ def partial_reindex_status(request: Request):
     return render(templates, request, "partials/reindex_status.html", {"info": info})
 
 
+@router.get("/provider-runtime", response_class=HTMLResponse)
+def partial_provider_runtime(request: Request):
+    r = get_sync("/healthz")
+    if r.status_code == 200:
+        info = r.json()
+    else:
+        info = {"status": "degraded", "provider": "unknown", "model": None, "rockchip_soc": None}
+    return render(templates, request, "partials/provider_runtime.html", {"info": info})
+
+
 @router.get("/backend-card", response_class=HTMLResponse)
 def partial_backend_card(request: Request):
     backend_ok = True

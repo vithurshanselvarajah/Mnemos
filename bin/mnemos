@@ -13,8 +13,12 @@
 #   docker compose up -d
 #
 # Usage:
-#   bin/mnemos build [compose-args...]   # build images (default: docker compose -f docker-compose.dev.yml build)
-#   bin/mnemos up    [compose-args...]   # build + start the stack
+#   bin/mnemos build <provider> [compose-args...]
+#                                     # build images (provider: cpu | nvidia | rockchip);
+#                                     # forwards MNEMOS_PROVIDER to compose
+#   bin/mnemos up    <provider> [compose-args...]
+#                                     # build + start the stack (provider: cpu | nvidia | rockchip);
+#                                     # forwards MNEMOS_PROVIDER to compose
 #   bin/mnemos down                       # stop the stack (keeps images + volumes)
 #   bin/mnemos delete images [-y]         # remove the Mnemos docker images
 #   bin/mnemos delete data   [-y]         # remove the Mnemos docker volumes (data, crops, pgvector)
@@ -92,14 +96,30 @@ container_count() { list_mnemos_containers | grep -c . || true; }
 
 cmd_build() {
     require_docker
-    say "Building images (no cache)…"
-    "${COMPOSE[@]}" build "$@"
+    if [[ $# -lt 1 ]]; then
+        die "build requires a provider: cpu | nvidia | rockchip"
+    fi
+    case "$1" in
+        cpu|nvidia|rockchip) ;;
+        *) die "unknown provider: $1 (expected: cpu | nvidia | rockchip)" ;;
+    esac
+    local provider="$1"; shift
+    say "Building images (provider=${provider})…"
+    MNEMOS_PROVIDER="$provider" "${COMPOSE[@]}" build "$@"
 }
 
 cmd_up() {
     require_docker
-    say "Building + starting stack…"
-    "${COMPOSE[@]}" up -d --build "$@"
+    if [[ $# -lt 1 ]]; then
+        die "up requires a provider: cpu | nvidia | rockchip"
+    fi
+    case "$1" in
+        cpu|nvidia|rockchip) ;;
+        *) die "unknown provider: $1 (expected: cpu | nvidia | rockchip)" ;;
+    esac
+    local provider="$1"; shift
+    say "Building + starting stack (provider=${provider})…"
+    MNEMOS_PROVIDER="$provider" "${COMPOSE[@]}" up -d --build "$@"
     cmd_status
 }
 
@@ -270,8 +290,10 @@ should use the production docker-compose.yml instead:
   docker compose up -d
 
 Usage:
-  bin/mnemos build                 Build the docker images from source.
-  bin/mnemos up                    Build + start the dev stack (detached).
+  bin/mnemos build <provider>        Build the docker images from source
+                                   (provider: cpu | nvidia | rockchip).
+  bin/mnemos up    <provider>        Build + start the dev stack (detached)
+                                   (provider: cpu | nvidia | rockchip).
   bin/mnemos down                  Stop the dev stack.
   bin/mnemos status                Show containers, volumes, images.
   bin/mnemos logs [service]        Tail logs.

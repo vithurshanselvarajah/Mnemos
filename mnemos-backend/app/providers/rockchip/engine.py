@@ -49,6 +49,10 @@ class RockchipEngine:
         return self._model_name
 
     @property
+    def active_providers(self) -> list[str]:
+        return ["rknn"]
+
+    @property
     def last_error(self) -> str | None:
         return self._last_error
 
@@ -83,9 +87,7 @@ class RockchipEngine:
         for art in variant.artifacts:
             if art.filename.startswith(kind):
                 return art.local_path
-        raise ProviderNotAvailable(
-            f"variant {variant.name!r} ({variant.kind}) has no {kind} artifact"
-        )
+        raise ProviderNotAvailable(f"variant {variant.name!r} ({variant.kind}) has no {kind} artifact")
 
     def _ensure_loaded(self) -> None:
         if (
@@ -99,9 +101,7 @@ class RockchipEngine:
         except KeyError as e:
             raise ProviderNotAvailable(str(e)) from e
         if not variant.kind.startswith("rknn/"):
-            raise ProviderNotAvailable(
-                f"variant {variant.name!r} ({variant.kind}) is not an RKNN variant"
-            )
+            raise ProviderNotAvailable(f"variant {variant.name!r} ({variant.kind}) is not an RKNN variant")
 
         det_path = self._local_path_for(variant, "detection")
         rec_path = self._local_path_for(variant, "recognition")
@@ -147,7 +147,7 @@ class RockchipEngine:
             self._ensure_loaded()
             dummy_image = np.zeros((_DET_INPUT_SIZE, _DET_INPUT_SIZE, 3), dtype=np.uint8)
             self.detect(dummy_image)
-            
+
             self._last_error = None
             return True
         except Exception as e:
@@ -162,7 +162,9 @@ class RockchipEngine:
             and self._loaded_name == self._model_name
         )
 
-    def _preprocess_detection(self, bgr_image: np.ndarray) -> tuple[np.ndarray, float, float, float, float, float]:
+    def _preprocess_detection(
+        self, bgr_image: np.ndarray
+    ) -> tuple[np.ndarray, float, float, float, float, float]:
         h, w = bgr_image.shape[:2]
         scale = min(_DET_INPUT_SIZE / w, _DET_INPUT_SIZE / h)
         nw, nh = int(round(w * scale)), int(round(h * scale))
@@ -190,11 +192,13 @@ class RockchipEngine:
         landmarks_out: list[np.ndarray] = []
         for stride, scores, bbox_pred, kps_pred in zip(
             _RETINA_STRIDES,
-            outputs[0:3], outputs[3:6], outputs[6:9],
+            outputs[0:3],
+            outputs[3:6],
+            outputs[6:9],
         ):
             feat_h = max(1, _DET_INPUT_SIZE // stride)
             feat_w = max(1, _DET_INPUT_SIZE // stride)
-            
+
             if scores.shape[1] == _RETINA_ANCHORS_PER_CELL:
                 scores = scores.transpose((0, 2, 3, 1))
                 bbox_pred = bbox_pred.transpose((0, 2, 3, 1))
@@ -209,9 +213,7 @@ class RockchipEngine:
             ax = np.arange(feat_w, dtype=np.float32) + 0.5
             ay = np.arange(feat_h, dtype=np.float32) + 0.5
             xv, yv = np.meshgrid(ax, ay)
-            anchor_centers = (
-                np.stack([xv, yv], axis=-1).reshape(-1, 2) * stride
-            )
+            anchor_centers = np.stack([xv, yv], axis=-1).reshape(-1, 2) * stride
             anchor_centers = np.repeat(anchor_centers, _RETINA_ANCHORS_PER_CELL, axis=0)
             sel_centers = anchor_centers[keep]
             sel_bbox = bbox_pred[keep]
@@ -232,9 +234,7 @@ class RockchipEngine:
             kps_x = np.clip(kps_x, 0, _DET_INPUT_SIZE)
             kps_y = np.clip(kps_y, 0, _DET_INPUT_SIZE)
             for k, idx in enumerate(keep):
-                boxes_out.append(
-                    [float(x1[k]), float(y1[k]), float(x2[k]), float(y2[k]), float(s[idx])]
-                )
+                boxes_out.append([float(x1[k]), float(y1[k]), float(x2[k]), float(y2[k]), float(s[idx])])
                 pts = np.stack([kps_x[k], kps_y[k]], axis=1).astype(np.float32)
                 landmarks_out.append(pts)
 

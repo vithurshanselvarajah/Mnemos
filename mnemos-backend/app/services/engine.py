@@ -76,6 +76,20 @@ class InsightFaceEngine:
     def provider_name(self) -> str:
         return self._provider_name
 
+    def active_providers(self) -> list[str]:
+        try:
+            inner = self._ensure_inner()
+        except ProviderNotAvailable:
+            return []
+        return list(getattr(inner, "active_providers", []))
+
+    def last_error(self) -> str | None:
+        try:
+            inner = self._ensure_inner()
+        except ProviderNotAvailable as e:
+            return f"{type(e).__name__}: {e}"
+        return getattr(inner, "last_error", None)
+
     def warmup(self) -> bool:
         try:
             return self._ensure_inner().warmup()

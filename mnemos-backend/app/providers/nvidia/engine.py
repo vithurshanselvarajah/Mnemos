@@ -13,22 +13,60 @@ log = logging.getLogger("mnemos.providers.nvidia")
 
 def _select_providers() -> list[str]:
     try:
-        import onnxruntime  # noqa: F401
+        import onnxruntime as ort
     except Exception as e:
         raise ProviderNotAvailable(f"onnxruntime not importable: {e}") from e
 
-    available: set[str] = set()
+    available = set(ort.get_available_providers())
+    if "CUDAExecutionProvider" not in available:
+        raise ProviderNotAvailable(
+            "CUDAExecutionProvider is not available in this onnxruntime build. "
+            "Install the NVIDIA variant (onnxruntime-gpu) and ensure the host has "
+            "a working CUDA driver + cuDNN runtime. "
+            f"Available providers: {sorted(available) or '(none)'}"
+        )
+    return ["CUDAExecutionProvider"]
+
+
+def detect_cuda_provider() -> dict[str, Any]:
+    info: dict[str, Any] = {
+        "onnxruntime_available": False,
+        "cuda_available": False,
+        "device_count": 0,
+        "available_providers": [],
+        "active_providers": [],
+        "last_error": None,
+    }
     try:
         import onnxruntime as ort
+    except Exception as e:
+        info["last_error"] = f"{type(e).__name__}: {e}"
+        return info
+    info["onnxruntime_available"] = True
+    try:
+        providers = list(ort.get_available_providers())
+    except Exception as e:
+        info["last_error"] = f"{type(e).__name__}: {e}"
+        return info
+    info["available_providers"] = providers
+    info["cuda_available"] = "CUDAExecutionProvider" in providers
+    if info["cuda_available"]:
+        try:
+            import ctypes
 
-        available = set(ort.get_available_providers())
-    except Exception:
-        available = set()
-
-    if "CUDAExecutionProvider" in available:
-        return ["CUDAExecutionProvider", "CPUExecutionProvider"]
-    log.warning("CUDAExecutionProvider not available; falling back to CPU")
-    return ["CPUExecutionProvider"]
+            n = 0
+            for lib in ("libcuda.so.1", "libcuda.so"):
+                try:
+                    ctypes.CDLL(lib)
+                    n += 1
+                    break
+                except OSError:
+                    continue
+            if n:
+                info["device_count"] = 1
+        except Exception as e:
+            info["last_error"] = f"{type(e).__name__}: {e}"
+    return info
 
 
 class NvidiaEngine:
@@ -42,6 +80,7 @@ class NvidiaEngine:
         self._det_size = det_size
         self._app: Any | None = None
         self._loaded_name: str | None = None
+        self._last_error: str | None = None
         self._providers = _select_providers()
 
     @property
@@ -51,6 +90,14 @@ class NvidiaEngine:
     @property
     def model_name(self) -> str:
         return self._model_name
+
+    @property
+    def active_providers(self) -> list[str]:
+        return list(self._providers)
+
+    @property
+    def last_error(self) -> str | None:
+        return self._last_error
 
     @classmethod
     def _acquire_read(cls) -> None:
@@ -101,9 +148,11 @@ class NvidiaEngine:
     def warmup(self) -> bool:
         try:
             self._ensure_loaded()
+            self._last_error = None
             return True
         except Exception as e:
-            log.warning("nvidia warmup failed: %s", e)
+            self._last_error = f"{type(e).__name__}: {e}"
+            log.warning("nvidia warmup failed: %s", self._last_error)
             return False
 
     def is_loaded(self) -> bool:

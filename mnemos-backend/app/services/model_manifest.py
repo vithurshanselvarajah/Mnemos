@@ -58,17 +58,21 @@ def _read_manifest_with_retry(url: str) -> dict[str, Any]:
     raise last_err
 
 
-def _artifact_to_url_and_path(base_url: str, model_name: str, kind: str, soc: str, art: dict[str, Any]) -> ModelArtifact:
+def _artifact_to_url_and_path(
+    base_url: str, model_name: str, kind: str, soc: str, art: dict[str, Any]
+) -> ModelArtifact:
     path = art.get("path")
     filename = art.get("filename")
     sha = art.get("sha256")
     size = art.get("size_bytes")
-    if not (isinstance(path, str) and isinstance(filename, str) and isinstance(sha, str) and isinstance(size, int)):
+    if not (
+        isinstance(path, str) and isinstance(filename, str) and isinstance(sha, str) and isinstance(size, int)
+    ):
         raise ValueError(f"manifest entry malformed for {model_name}/{kind}: {art!r}")
     rel = path.lstrip("/")
     idx = rel.find("/models/")
     if idx >= 0:
-        local_rel = rel[idx + 1:]
+        local_rel = rel[idx + 1 :]
     else:
         local_rel = rel
     local = os.path.join(settings.models_root, local_rel)
@@ -163,27 +167,51 @@ def supported_rockchip_socs() -> list[str]:
 
 def preflight_provider() -> None:
     provider = settings.provider
-    if provider != "rockchip":
-        return
-    import platform
+    if provider == "rockchip":
+        import platform
 
-    machine = platform.machine().lower()
-    if machine not in ("aarch64", "arm64"):
-        raise SystemExit(
-            f"provider=rockchip requires an aarch64/arm64 host "
-            f"(detected machine={machine!r}). Please use the CPU or NVIDIA variant on this host."
-        )
-    detected = _detect_rockchip_soc()
-    try:
-        supported = supported_rockchip_socs()
-    except Exception as e:
-        raise SystemExit(
-            f"preflight failed: provider=rockchip detected_soc={detected} "
-            f"could not load manifest: {e}"
-        ) from e
-    if detected not in supported:
-        supported_list = ", ".join(supported) if supported else "(none)"
-        raise SystemExit(
-            f"unsupported Rockchip SoC detected={detected} (supported: {supported_list}). "
-            f"Please use the CPU variant, or set MNEMOS_ROCKCHIP_SOC to a supported value."
-        )
+        machine = platform.machine().lower()
+        if machine not in ("aarch64", "arm64"):
+            raise SystemExit(
+                f"provider=rockchip requires an aarch64/arm64 host "
+                f"(detected machine={machine!r}). Please use the CPU or NVIDIA variant on this host."
+            )
+        detected = _detect_rockchip_soc()
+        try:
+            supported = supported_rockchip_socs()
+        except Exception as e:
+            raise SystemExit(
+                f"preflight failed: provider=rockchip detected_soc={detected} could not load manifest: {e}"
+            ) from e
+        if detected not in supported:
+            supported_list = ", ".join(supported) if supported else "(none)"
+            raise SystemExit(
+                f"unsupported Rockchip SoC detected={detected} (supported: {supported_list}). "
+                f"Please use the CPU variant, or set MNEMOS_ROCKCHIP_SOC to a supported value."
+            )
+        return
+
+    if provider == "nvidia":
+        from app.providers.nvidia import detect_cuda_provider
+
+        info = detect_cuda_provider()
+        if not info["onnxruntime_available"]:
+            raise SystemExit(
+                "preflight failed: provider=nvidia but onnxruntime could not be imported. "
+                f"Reason: {info['last_error']}"
+            )
+        if not info["cuda_available"]:
+            available = ", ".join(info["available_providers"]) or "(none)"
+            raise SystemExit(
+                "preflight failed: provider=nvidia requires the CUDAExecutionProvider, "
+                f"but it is not present in this onnxruntime build. "
+                f"Available providers: {available}. "
+                "Install the NVIDIA variant (onnxruntime-gpu) and ensure the host has "
+                "a working CUDA driver + cuDNN runtime, or switch to provider=cpu."
+            )
+        if info["device_count"] == 0:
+            raise SystemExit(
+                "preflight failed: provider=nvidia detected CUDAExecutionProvider, but "
+                "libcuda could not be loaded on the host. Ensure the NVIDIA driver is "
+                "installed and visible to the container, or switch to provider=cpu."
+            )

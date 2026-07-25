@@ -22,6 +22,7 @@ class CpuEngine:
         self._det_size = det_size
         self._app: Any | None = None
         self._loaded_name: str | None = None
+        self._last_error: str | None = None
 
     @property
     def provider_name(self) -> str:
@@ -30,6 +31,14 @@ class CpuEngine:
     @property
     def model_name(self) -> str:
         return self._model_name
+
+    @property
+    def active_providers(self) -> list[str]:
+        return ["CPUExecutionProvider"]
+
+    @property
+    def last_error(self) -> str | None:
+        return self._last_error
 
     @classmethod
     def _acquire_read(cls) -> None:
@@ -75,9 +84,11 @@ class CpuEngine:
     def warmup(self) -> bool:
         try:
             self._ensure_loaded()
+            self._last_error = None
             return True
         except Exception as e:
-            log.warning("cpu warmup failed: %s", e)
+            self._last_error = f"{type(e).__name__}: {e}"
+            log.warning("cpu warmup failed: %s", self._last_error)
             return False
 
     def is_loaded(self) -> bool:

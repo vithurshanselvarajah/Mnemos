@@ -1,4 +1,4 @@
 --extra-index-url https://pypi.nvidia.com
 
-onnxruntime-gpu==1.27.0
+onnxruntime-gpu==1.28.0
 insightface==1.0.1

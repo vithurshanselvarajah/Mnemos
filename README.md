@@ -8,6 +8,15 @@ management interface for labeling unrecognized faces.
 
 - **Backend** (`mnemos-backend`) — FastAPI + InsightFace (CPU via ONNX Runtime) + pgvector.
 - **Frontend** (`mnemos-frontend`) — FastAPI + Jinja2 + HTMX + Alpine.js management UI.
+
+## Documentation
+
+The full documentation lives in the [`docs/`](docs/Home.md) directory — it syncs to the GitHub wiki.
+
+- New here? Start with [Quick Start](docs/Quick-Start.md) and [First Run](docs/First-Run.md).
+- Integrating with Mnemos? See the [API Overview](docs/API-Overview.md).
+- Running on NVIDIA / Rockchip? See [Providers](docs/Providers.md).
+- Developing? See [Architecture](docs/Architecture.md) and [Contributing](docs/Contributing.md).
 - **Vector DB** (`mnemos-vector-db`) — PostgreSQL 18 with the `pgvector` extension.
 
 ## New Project Notice 

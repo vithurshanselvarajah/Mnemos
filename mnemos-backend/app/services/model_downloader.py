@@ -1,16 +1,17 @@
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import logging
 import os
 import time
-from typing import Callable
+from collections.abc import Callable
 
 import requests
 
 from app.core.config import settings
-from app.services.model_manifest import ModelArtifact, ModelVariant
 from app.services import websocket_hub
+from app.services.model_manifest import ModelArtifact, ModelVariant
 
 log = logging.getLogger("mnemos.model_downloader")
 
@@ -22,8 +23,9 @@ class DownloadError(RuntimeError):
 ProgressCb = Callable[[int, int, str, str], None]
 
 
-def _broadcast_download(done: int, total: int, model: str, *, kind: str = "reindex",
-                        artifact: str | None = None) -> None:
+def _broadcast_download(
+    done: int, total: int, model: str, *, kind: str = "reindex", artifact: str | None = None
+) -> None:
     pct = int(100 * done / total) if total > 0 else 0
     payload: dict = {
         "type": f"{kind}.download",
@@ -48,8 +50,9 @@ def _hash_file(path: str, expected_sha256: str, *, chunk: int = 1024 * 1024) -> 
     return h.hexdigest().lower() == expected_sha256.lower()
 
 
-def download_artifact(art: ModelArtifact, *, model_name: str, kind: str = "reindex",
-                     on_progress: ProgressCb | None = None) -> None:
+def download_artifact(
+    art: ModelArtifact, *, model_name: str, kind: str = "reindex", on_progress: ProgressCb | None = None
+) -> None:
     os.makedirs(os.path.dirname(art.local_path), exist_ok=True)
     tmp_path = art.local_path + ".part"
     have = os.path.getsize(tmp_path) if os.path.isfile(tmp_path) else 0
@@ -79,9 +82,7 @@ def download_artifact(art: ModelArtifact, *, model_name: str, kind: str = "reind
                 log.warning("server ignored Range; restarting %s from zero", art.filename)
                 start_from = 0
                 mode = "wb"
-            elif r.status_code == 206:
-                pass
-            elif r.status_code == 200:
+            elif r.status_code == 206 or r.status_code == 200:
                 pass
             else:
                 r.raise_for_status()
@@ -109,16 +110,16 @@ def download_artifact(art: ModelArtifact, *, model_name: str, kind: str = "reind
                     pct = int(100 * done / art.size_bytes) if art.size_bytes > 0 else 0
                     now = time.time()
                     if pct != last_pct or (now - last_broadcast) > 0.25:
-                        _broadcast_download(done, art.size_bytes, model_name, kind=kind, artifact=art.filename)
+                        _broadcast_download(
+                            done, art.size_bytes, model_name, kind=kind, artifact=art.filename
+                        )
                         if on_progress is not None:
                             on_progress(done, art.size_bytes, model_name, art.filename)
                         last_pct = pct
                         last_broadcast = now
 
             if done < art.size_bytes:
-                raise DownloadError(
-                    f"download truncated for {art.filename}: got {done} of {art.size_bytes}"
-                )
+                raise DownloadError(f"download truncated for {art.filename}: got {done} of {art.size_bytes}")
 
             if not _hash_file(tmp_path, art.sha256):
                 raise DownloadError(f"sha256 mismatch for {art.filename}")
@@ -131,15 +132,14 @@ def download_artifact(art: ModelArtifact, *, model_name: str, kind: str = "reind
     except Exception as e:
         log.exception("download failed for %s", art.filename)
         if os.path.isfile(tmp_path) and os.path.getsize(tmp_path) < 1024:
-            try:
+            with contextlib.suppress(OSError):
                 os.remove(tmp_path)
-            except OSError:
-                pass
         raise DownloadError(f"{art.filename}: {e}") from e
 
 
-def download_variant(variant: ModelVariant, *, kind: str = "reindex",
-                     on_progress: ProgressCb | None = None) -> None:
+def download_variant(
+    variant: ModelVariant, *, kind: str = "reindex", on_progress: ProgressCb | None = None
+) -> None:
     for art in variant.artifacts:
         download_artifact(art, model_name=variant.name, kind=kind, on_progress=on_progress)
 

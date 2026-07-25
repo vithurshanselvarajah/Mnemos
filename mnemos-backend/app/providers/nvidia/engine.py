@@ -71,7 +71,7 @@ def detect_cuda_provider() -> dict[str, Any]:
 
 class NvidiaEngine:
     _rw_lock = threading.Condition(threading.RLock())
-    _instance: "NvidiaEngine | None" = None
+    _instance: NvidiaEngine | None = None
     _writers = 0
     _readers = 0
 

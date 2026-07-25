@@ -19,7 +19,6 @@ from app.services.engine import InsightFaceEngine
 from app.services.model_downloader import (
     DownloadError,
     download_variant,
-    is_model_ready,
     variant_files_present,
 )
 from app.services.model_manifest import variant_for
@@ -236,9 +235,7 @@ def run_reindex_sync(new_model: str) -> None:
 
         if not engine.warmup():
             last_err = getattr(engine, "last_error", None) or "unknown"
-            raise RuntimeError(
-                f"Failed to load model {new_model} into memory: {last_err}"
-            )
+            raise RuntimeError(f"Failed to load model {new_model} into memory: {last_err}")
 
         crops = _list_crop_ids_with_paths()
         state.total = len(crops)

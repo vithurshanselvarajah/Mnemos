@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import contextlib
 import logging
 import threading
-import time
 from typing import Any
 
 import cv2
@@ -26,7 +26,7 @@ _RETINA_ANCHORS_PER_CELL = 2
 
 class RockchipEngine:
     _rw_lock = threading.Condition(threading.RLock())
-    _instance: "RockchipEngine | None" = None
+    _instance: RockchipEngine | None = None
     _writers = 0
     _readers = 0
 
@@ -124,16 +124,12 @@ class RockchipEngine:
             if rec.init_runtime(core_mask=_rknn_shim._RKNN_NPU_CORE_0_1_2) != 0:
                 raise ProviderNotAvailable("recognition init_runtime failed")
         except ProviderNotAvailable:
-            try:
+            with contextlib.suppress(Exception):
                 det.release()
-            except Exception:
-                pass
             raise
         except RuntimeError as e:
-            try:
+            with contextlib.suppress(Exception):
                 det.release()
-            except Exception:
-                pass
             raise ProviderNotAvailable(str(e)) from e
 
         self._det_runtime = det
@@ -167,7 +163,7 @@ class RockchipEngine:
     ) -> tuple[np.ndarray, float, float, float, float, float]:
         h, w = bgr_image.shape[:2]
         scale = min(_DET_INPUT_SIZE / w, _DET_INPUT_SIZE / h)
-        nw, nh = int(round(w * scale)), int(round(h * scale))
+        nw, nh = round(w * scale), round(h * scale)
         resized = cv2.resize(bgr_image, (nw, nh))
         canvas = np.full((_DET_INPUT_SIZE, _DET_INPUT_SIZE, 3), 0, dtype=np.uint8)
         canvas[:nh, :nw] = resized
@@ -195,6 +191,7 @@ class RockchipEngine:
             outputs[0:3],
             outputs[3:6],
             outputs[6:9],
+            strict=True,
         ):
             feat_h = max(1, _DET_INPUT_SIZE // stride)
             feat_w = max(1, _DET_INPUT_SIZE // stride)
@@ -278,7 +275,7 @@ class RockchipEngine:
         rank = np.linalg.matrix_rank(A)
         if rank == 0:
             return np.nan * T
-        elif rank == dim - 1:
+        if rank == dim - 1:
             if np.linalg.det(U) * np.linalg.det(V) > 0:
                 T[:dim, :dim] = U @ V
             else:
@@ -369,10 +366,8 @@ class RockchipEngine:
             self._model_name = new_name
             for rt in (self._det_runtime, self._rec_runtime):
                 if rt is not None:
-                    try:
+                    with contextlib.suppress(Exception):
                         rt.release()
-                    except Exception:
-                        pass
             self._det_runtime = None
             self._rec_runtime = None
             self._det_variant = None

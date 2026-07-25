@@ -13,9 +13,7 @@ def main() -> int:
         choices=["rk3588", "rk3568", "rk3566", "rv1103", "rv1106"],
         help="Target Rockchip SoC platform",
     )
-    raise NotImplementedError(
-        "RKNN conversion pipeline is a TODO — see variants/rockchip/convert.py"
-    )
+    raise NotImplementedError("RKNN conversion pipeline is a TODO — see variants/rockchip/convert.py")
 
 
 if __name__ == "__main__":

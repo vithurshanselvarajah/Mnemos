@@ -4,10 +4,8 @@ import ctypes
 import os
 import sys
 import types
-from typing import Any
 
 import numpy as np
-
 
 _RKNN_QUERY_IN_OUT_NUM = 0
 _RKNN_QUERY_INPUT_ATTR = 1
@@ -92,8 +90,7 @@ def _load_librknnrt() -> ctypes.CDLL:
         except OSError as e:
             last_err = e
     raise RuntimeError(
-        f"could not load librknnrt.so (looked at: {[c for c in candidates if c]}); "
-        f"last error: {last_err}"
+        f"could not load librknnrt.so (looked at: {[c for c in candidates if c]}); last error: {last_err}"
     )
 
 
@@ -193,9 +190,7 @@ class RKNNLite:
         for i in range(n):
             attr = _rknn_tensor_attr()
             attr.index = i
-            ret = lib.rknn_query(
-                self._ctx.value, what, ctypes.byref(attr), ctypes.sizeof(attr)
-            )
+            ret = lib.rknn_query(self._ctx.value, what, ctypes.byref(attr), ctypes.sizeof(attr))
             if ret != 0:
                 raise RuntimeError(f"rknn_query({what}, index={i}) failed: {ret}")
             results.append(attr)
@@ -231,15 +226,13 @@ class RKNNLite:
         if not self._loaded:
             raise RuntimeError("model not loaded")
         if len(inputs) != len(self._input_attrs):
-            raise ValueError(
-                f"expected {len(self._input_attrs)} input(s), got {len(inputs)}"
-            )
+            raise ValueError(f"expected {len(self._input_attrs)} input(s), got {len(inputs)}")
         lib = self._ensure_lib()
 
         input_structs = (_rknn_input * len(inputs))()
         bufs: list[tuple[np.ndarray, int]] = []
         try:
-            for i, (arr, attr) in enumerate(zip(inputs, self._input_attrs)):
+            for i, (arr, attr) in enumerate(zip(inputs, self._input_attrs, strict=True)):
                 if arr.dtype != np.float32:
                     arr = arr.astype(np.float32, copy=False)
                 if int(attr.fmt) == _RKNN_TENSOR_NHWC and arr.ndim == 4:
@@ -267,16 +260,14 @@ class RKNNLite:
 
             n_out = len(self._output_attrs)
             out_structs = (_rknn_output * n_out)()
-            for i, attr in enumerate(self._output_attrs):
+            for i, _attr in enumerate(self._output_attrs):
                 out_structs[i].want_float = 1
                 out_structs[i].is_prealloc = 0
                 out_structs[i].index = i
                 out_structs[i].buf = ctypes.c_void_p(0)
                 out_structs[i].size = 0
 
-            ret = lib.rknn_outputs_get(
-                self._ctx.value, n_out, ctypes.byref(out_structs), ctypes.c_void_p(0)
-            )
+            ret = lib.rknn_outputs_get(self._ctx.value, n_out, ctypes.byref(out_structs), ctypes.c_void_p(0))
             if ret != 0:
                 raise RuntimeError(f"rknn_outputs_get failed: {ret}")
 

@@ -161,7 +161,7 @@ def supported_rockchip_socs() -> list[str]:
     for entry in raw.get("models", {}).values():
         rknn = entry.get("rknn") if isinstance(entry, dict) else None
         if isinstance(rknn, dict):
-            out.update(k for k in rknn.keys() if isinstance(k, str))
+            out.update(k for k in rknn if isinstance(k, str))
     return sorted(out)
 
 

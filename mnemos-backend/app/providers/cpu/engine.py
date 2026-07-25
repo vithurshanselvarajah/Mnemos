@@ -13,7 +13,7 @@ log = logging.getLogger("mnemos.providers.cpu")
 
 class CpuEngine:
     _rw_lock = threading.Condition(threading.RLock())
-    _instance: "CpuEngine | None" = None
+    _instance: CpuEngine | None = None
     _writers = 0
     _readers = 0
 

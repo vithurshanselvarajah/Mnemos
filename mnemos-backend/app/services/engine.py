@@ -29,7 +29,7 @@ def _load_provider(provider: str, model_name: str, det_size: int) -> Any:
 
 class InsightFaceEngine:
     _rw_lock = threading.Condition(threading.RLock())
-    _instance: "InsightFaceEngine | None" = None
+    _instance: InsightFaceEngine | None = None
 
     def __init__(self, model_name: str, det_size: int, provider: str | None = None) -> None:
         from app.core.config import settings
@@ -41,7 +41,7 @@ class InsightFaceEngine:
         self._loaded_provider: str | None = None
 
     @classmethod
-    def current(cls) -> "InsightFaceEngine":
+    def current(cls) -> InsightFaceEngine:
         if cls._instance is None:
             from app.core.config import settings
 
@@ -111,4 +111,4 @@ class InsightFaceEngine:
             self._inner.switch_model(new_name)
 
 
-__all__ = ["InsightFaceEngine", "Detection"]
+__all__ = ["Detection", "InsightFaceEngine"]

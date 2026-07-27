@@ -75,7 +75,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('mnemos-backend/requirements.txt', 'mnemos-frontend/requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('mnemos-backend/requirements.txt', 'mnemos-backend/variants/cpu/requirements.txt', 'mnemos-frontend/requirements.txt', 'tests/requirements-test.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-
 
@@ -85,6 +85,11 @@ jobs:
           python -m pip install --only-binary=:all: --prefer-binary \
             -r mnemos-backend/requirements.txt
 
+      - name: Install CPU variant dependencies
+        run: |
+          python -m pip install --only-binary=:all: --prefer-binary \
+            -r mnemos-backend/variants/cpu/requirements.txt
+
       - name: Install frontend dependencies
         run: |
           python -m pip install --only-binary=:all: --prefer-binary \
@@ -93,7 +98,7 @@ jobs:
       - name: Install test tooling
         run: |
           python -m pip install --only-binary=:all: --prefer-binary \
-            pytest
+            -r tests/requirements-test.txt
 
       - name: Run pytest
         env:

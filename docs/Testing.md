@@ -26,6 +26,23 @@ python3 -m pytest -x                         # stop on first failure
 python3 -m pytest --tb=short                 # shorter tracebacks
 ```
 
+### Test dependencies
+
+Test-only dependencies (currently just `pytest`) live in `tests/requirements-test.txt` so they stay out of the production images. To set up a fresh dev env:
+
+```bash
+python3 -m pip install --upgrade "pip>=25"
+python3 -m pip install --only-binary=:all: --prefer-binary \
+    -r mnemos-backend/requirements.txt \
+    -r mnemos-backend/variants/cpu/requirements.txt \
+    -r mnemos-frontend/requirements.txt \
+    -r tests/requirements-test.txt
+```
+
+The CPU variant (`insightface` + `onnxruntime`) is needed because even though the tests mock the inference engine, `monkeypatch.setattr("insightface.app.FaceAnalysis", ...)` still requires the module to be importable. CI installs the CPU variant for the same reason — never the NVIDIA variant, which would pull in `onnxruntime-gpu` (Linux CUDA libraries).
+
+CI does exactly this in `.github/workflows/ci.yml`. The Dockerfiles only install their respective service `requirements.txt` and the variant that matches the `INSTALL_PROVIDER` build arg — `pytest` and variant inference deps for other architectures are never baked into the runtime images.
+
 You can also use `pytest-watch` for live development:
 
 ```bash

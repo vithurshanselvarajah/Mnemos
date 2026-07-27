@@ -184,7 +184,7 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Download digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: digests-mnemos-${{ matrix.service }}-*
           path: /tmp/digests
@@ -418,7 +418,7 @@ jobs:
           fetch-depth: 0
 
       - name: Download every per-service bundle
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: bundle-mnemos-*
           path: /tmp/bundles

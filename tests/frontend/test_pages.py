@@ -282,15 +282,22 @@ def test_api_alias_to_swagger(logged_in_admin):
 
 
 def test_partials_ws_target(fe_setup):
+    from urllib.parse import urlparse
+
     _app, tc = fe_setup
     r = tc.get("/partials/ws-target", headers={"host": "example.com"})
     assert r.status_code == 200
     body = r.json()
-    assert body["ws_url"].startswith("ws://example.com")
+    parsed = urlparse(body["ws_url"])
+    assert parsed.scheme == "ws"
+    assert parsed.hostname == "example.com"
 
 
 def test_partials_ws_target_https(fe_setup):
+    from urllib.parse import urlparse
+
     _app, tc = fe_setup
     r = tc.get("/partials/ws-target", headers={"host": "example.com", "x-forwarded-proto": "https"})
     body = r.json()
-    assert "ws_url" in body
+    parsed = urlparse(body["ws_url"])
+    assert parsed.hostname == "example.com"

@@ -57,9 +57,7 @@ def list_keys(_: ApiKey = Depends(require_full_admin)) -> list[ApiKeyOut]:
     with session_scope() as s:
         rows = (
             s.execute(
-                select(ApiKey)
-                .where(ApiKey.is_pairing_key.is_(False))
-                .order_by(ApiKey.created_at.desc())
+                select(ApiKey).where(ApiKey.is_pairing_key.is_(False)).order_by(ApiKey.created_at.desc())
             )
             .scalars()
             .all()

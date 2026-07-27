@@ -30,6 +30,14 @@ class ApiKey(SQLModel, table=True):
     expires_at: datetime | None = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     revoked_at: datetime | None = None
+    is_pairing_key: bool = Field(
+        default=False,
+        description=(
+            "True when this key was minted by /system/pair to bootstrap the "
+            "frontend↔backend link. Pairing keys are hidden from the keys list "
+            "and cannot be revoked or deleted via the keys API."
+        ),
+    )
 
 
 class Person(SQLModel, table=True):

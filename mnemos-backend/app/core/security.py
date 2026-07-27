@@ -58,7 +58,12 @@ def view_master_key() -> str:
     return ensure_master_key()
 
 
-def create_api_key(name: str, permission_level: str, expires_at=None) -> tuple[ApiKey, str]:
+def create_api_key(
+    name: str,
+    permission_level: str,
+    expires_at=None,
+    is_pairing_key: bool = False,
+) -> tuple[ApiKey, str]:
     raw = new_random_key()
     row = ApiKey(
         name=name,
@@ -66,6 +71,7 @@ def create_api_key(name: str, permission_level: str, expires_at=None) -> tuple[A
         key_prefix=raw[:8],
         permission_level=permission_level,
         expires_at=expires_at,
+        is_pairing_key=is_pairing_key,
     )
     with session_scope() as s:
         s.add(row)

@@ -131,6 +131,13 @@ class ApiKeyOut(BaseModel):
     expires_at: datetime | None = None
     created_at: datetime
     revoked_at: datetime | None = None
+    is_pairing_key: bool = Field(
+        default=False,
+        description=(
+            "True when this key was minted by /system/pair to bootstrap the "
+            "frontend↔backend link. Pairing keys are filtered out of the keys list."
+        ),
+    )
 
 
 class ApiKeyCreate(BaseModel):

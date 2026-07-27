@@ -52,7 +52,7 @@ This wiki is the canonical documentation. It syncs from the `docs/` folder in th
 
 - **Stack** — Python 3.14, FastAPI, InsightFace, pgvector, Jinja2 + HTMX + Alpine.js
 - **Storage** — SQLite for relations, PostgreSQL 18 + pgvector for embeddings, JPEG on disk for face crops
-- **License** — see [LICENSE](../LICENSE) in the repo root
+- **License** — Mnemos itself is **AGPL v3 or later**; see [LICENSE](../LICENSE). Third-party components (insightface, onnxruntime, the buffalo model weights) are listed in [LICENSE-EXTERNAL](../LICENSE-EXTERNAL).
 
 ## How to read this wiki
 

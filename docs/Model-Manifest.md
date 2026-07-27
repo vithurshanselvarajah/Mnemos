@@ -103,6 +103,14 @@ To pin a specific manifest version, or to host artifacts privately:
 
 The manifest's `base_url` can be different from the manifest's own URL — the manifest is just JSON, the artifacts are at `base_url + path`.
 
+## Model licensing
+
+The buffalo family of weights is distributed by deepinsight under the **MIT
+license**. The full text is reproduced in [LICENSE-EXTERNAL](../LICENSE-EXTERNAL)
+section 6. If you ship a derived image or redistribute a self-hosted mirror,
+keep the upstream copyright notice with the weights. The detection / recognition
+ONNX files themselves are unmodified from the upstream releases.
+
 ## Adding a new model
 
 To add `buffalo_xl` to the supported set:

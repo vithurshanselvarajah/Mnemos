@@ -53,7 +53,7 @@ jobs:
         service: ${{ fromJSON(needs.matrix-setup.outputs.targets) }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -101,7 +101,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Read version for target
         id: version
@@ -113,7 +113,7 @@ jobs:
 
       - name: Extract metadata for image
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ github.repository_owner }}/mnemos-${{ matrix.service }}
 
@@ -146,7 +146,7 @@ jobs:
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: Upload digest artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: digests-mnemos-${{ matrix.service }}-${{ matrix.platform.arch }}
           path: /tmp/digests/*
@@ -165,7 +165,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -184,7 +184,7 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Download digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: digests-mnemos-${{ matrix.service }}-*
           path: /tmp/digests
@@ -202,7 +202,7 @@ jobs:
 
       - name: Extract metadata for image
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ github.repository_owner }}/mnemos-${{ matrix.service }}
           tags: |
@@ -395,7 +395,7 @@ jobs:
           cat service-info.json
 
       - name: Upload per-service release bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bundle-mnemos-${{ matrix.service }}-${{ steps.version.outputs.version }}
           path: |
@@ -413,12 +413,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Download every per-service bundle
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: bundle-mnemos-*
           path: /tmp/bundles

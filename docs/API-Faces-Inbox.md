@@ -51,6 +51,7 @@ curl -s -H "X-API-Key: $KEY" "http://localhost:8000/api/v1/faces/unassigned?page
 | --- | --- | --- | --- |
 | `page` | 1 | ≥ 1 | 1-indexed |
 | `page_size` | 24 | 1-200 | Hard upper limit is 200 to avoid OOMing the response |
+| `count_only` | `false` | — | Return only `{total, page: 1, page_size: 0, items: []}` without materialising the page. Cheap for polling clients (e.g. Home Assistant) that only need the count. |
 
 Returns:
 
@@ -64,6 +65,13 @@ Returns:
 ```
 
 Ordered by `created_at DESC` (newest first).
+
+**Count-only example:**
+
+```bash
+curl -s -H "X-API-Key: $KEY" "http://localhost:8000/api/v1/faces/unassigned?count_only=true" | jq
+# { "total": 137, "page": 1, "page_size": 0, "items": [] }
+```
 
 ## Assign
 

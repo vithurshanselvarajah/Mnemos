@@ -63,7 +63,7 @@ jobs:
         include: ${{ fromJSON(needs.resolve.outputs.matrix) }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Read backend version
         id: version

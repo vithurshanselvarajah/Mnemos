@@ -32,16 +32,24 @@ jobs:
     name: Resolve target providers
     runs-on: ubuntu-latest
     outputs:
-      providers: ${{ steps.set.outputs.providers }}
+      matrix: ${{ steps.set.outputs.matrix }}
     steps:
       - id: set
         run: |
-          if [[ "${{ inputs.providers }}" == "all" ]]; then
-            echo 'providers=["cpu","nvidia","rockchip"]' >> "$GITHUB_OUTPUT"
+          all='[{"provider":"cpu","arch":"amd64","runner":"ubuntu-latest","target":"linux/amd64","base_image":"python:3.14-slim"},{"provider":"cpu","arch":"arm64","runner":"ubuntu-24.04-arm","target":"linux/arm64","base_image":"python:3.14-slim"},{"provider":"nvidia","arch":"amd64","runner":"ubuntu-latest","target":"linux/amd64","base_image":"nvidia/cuda:12.4.1-cudnn-runtime-ubuntu24.04"},{"provider":"rockchip","arch":"arm64","runner":"ubuntu-24.04-arm","target":"linux/arm64","base_image":"python:3.14-slim"}]'
+          wanted="${{ inputs.providers }}"
+          if [[ "$wanted" == "all" || -z "$wanted" ]]; then
+            matrix="$all"
           else
-            csv='"'$(echo "${{ inputs.providers }}" | tr ',' '\n' | tr -d ' ' | paste -sd '","' -)'"'
-            echo "providers=[${csv}]" >> "$GITHUB_OUTPUT"
+            wanted_csv=$(echo "$wanted" | tr ',' '\n' | tr -d ' ' | sed '/^$/d' | paste -sd '|' -)
+            matrix=$(echo "$all" | jq -c "[ .[] | select(.provider | test(\"^($wanted_csv)$\")) ]")
+            if [[ "$matrix" == "[]" || -z "$matrix" ]]; then
+              echo "::error::No matching providers for input: $wanted" >&2
+              exit 1
+            fi
           fi
+          one_line=$(printf '%s' "$matrix" | tr -d '\n')
+          { echo "matrix<<EOF"; echo "$one_line"; echo "EOF"; } >> "$GITHUB_OUTPUT"
 
   build:
     name: Build (${{ matrix.provider }} / ${{ matrix.arch }})
@@ -50,33 +58,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        provider: ${{ fromJSON(needs.resolve.outputs.providers) }}
-        include:
-          - provider: cpu
-            arch: amd64
-            runner: ubuntu-latest
-            target: linux/amd64
-            base_image: python:3.14-slim
-          - provider: cpu
-            arch: arm64
-            runner: ubuntu-26.04-arm
-            target: linux/arm64
-            base_image: python:3.14-slim
-          - provider: nvidia
-            arch: amd64
-            runner: ubuntu-latest
-            target: linux/amd64
-            base_image: nvidia/cuda:12.4.1-cudnn-runtime-ubuntu24.04
-          - provider: nvidia
-            arch: arm64
-            runner: ubuntu-26.04-arm
-            target: linux/arm64
-            base_image: nvidia/cuda:12.4.1-cudnn-runtime-ubuntu24.04
-          - provider: rockchip
-            arch: arm64
-            runner: ubuntu-26.04-arm
-            target: linux/arm64
-            base_image: python:3.14-slim
+        include: ${{ fromJSON(needs.resolve.outputs.matrix) }}
 
     steps:
       - uses: actions/checkout@v4

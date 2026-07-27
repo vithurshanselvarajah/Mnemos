@@ -72,7 +72,7 @@ jobs:
           python-version: "3.14"
 
       - name: Cache pip
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('mnemos-backend/requirements.txt', 'mnemos-backend/variants/cpu/requirements.txt', 'mnemos-frontend/requirements.txt', 'tests/requirements-test.txt') }}

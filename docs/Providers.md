@@ -108,19 +108,67 @@ CUDA driver + cuDNN runtime, or switch to provider=cpu.
 
 The host must have:
 
-- A CUDA-capable GPU (Compute capability ≥ 5.0, which is anything from the last 10 years)
-- An NVIDIA driver compatible with CUDA 12.4
-- The NVIDIA Container Toolkit (`nvidia-ctk`)
-- The compose file's GPU runtime configured (it is, by default — `runtime: nvidia` on the `mnemos-backend` service)
+- A CUDA-capable GPU (Compute capability ≥ 5.0 — anything from the last 10 years)
+- An NVIDIA proprietary driver ≥ 535, recent enough to satisfy CUDA 13.x userspace (the in-container runtime is CUDA 13.3)
+- The [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) (`nvidia-container-toolkit` package) configured for Docker
+- A 64-bit Linux kernel (the toolkit does not support macOS, Windows, or WSL2 with native Docker)
+- `curl` and `gnupg` (for adding NVIDIA's apt repo inside the image build)
 
-To verify:
+On the host, install and configure the toolkit:
 
 ```bash
-nvidia-smi
-docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu24.04 nvidia-smi
+# Debian / Ubuntu
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+  | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+  | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
+  | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+sudo apt-get update
+sudo apt-get install -y nvidia-container-toolkit
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
 ```
 
-If the second command works, the container toolkit is installed and the compose GPU passthrough is good.
+```bash
+# RHEL / Fedora / Rocky
+curl -s -L https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo \
+  | sudo tee /etc/yum.repos.d/nvidia-container-toolkit.repo
+sudo dnf install -y nvidia-container-toolkit
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+```
+
+Then the compose stack's `mnemos-backend` service needs the GPU attached. Production `docker-compose.yml` and `docker-compose.dev.yml` declare it on the `mnemos-backend` service via:
+
+```yaml
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+```
+
+If you fork the compose file, copy that block. (Older setups used `runtime: nvidia` — the `deploy.resources` form is the current Docker Compose v2 idiom and works on both rootless and rootful Docker.)
+
+To verify the whole chain:
+
+```bash
+# 1. The driver works at all
+nvidia-smi
+
+# 2. The toolkit can hand the GPU to a container
+docker run --rm --gpus all nvidia/cuda:13.0.0-base-ubuntu24.04 nvidia-smi
+
+# 3. The compose stack is wired up
+./bin/mnemos up nvidia
+docker compose -f docker-compose.dev.yml logs -f mnemos-backend
+# Look for: providers=['TensorrtExecutionProvider', 'CUDAExecutionProvider', 'CPUExecutionProvider']
+# Look for: GET /healthz → nvidia.cuda_available: true
+```
+
+If the second command works but the third doesn't, the compose file is missing the `deploy.resources` block. If neither works, the toolkit isn't configured.
 
 ### Health and diagnostics
 
@@ -167,6 +215,74 @@ The backend will refuse to start if the detected (or overridden) SoC has no entr
 ### Why a ctypes shim
 
 The RKNN runtime is shipped as `librknnrt.so`, a C library. Rather than bind to it with cffi or pybind11, the project uses a thin Python ctypes shim (`app.providers.rockchip._rknn_shim`). The shim is small and reads cleanly; the alternative (a compiled binding) would add a build step and a more complex Dockerfile.
+
+### Prerequisites
+
+The Rockchip variant only works on a host that is actually a supported Rockchip SoC. The full list is `rk3588`, `rk3576`, `rk3568`, `rk3566`. Anything else (and anything x86) will fail preflight with an `unsupported Rockchip SoC detected` error.
+
+#### Board Support Package (BSP) kernel
+
+The **mandatory** prerequisite is that the host is running the board vendor's BSP kernel (the one that ships `librknnrt.so` and exposes the NPU device node). Distro kernels (Debian `arm64`, Ubuntu Server `arm64`, Armbian generic) do **not** include the NPU driver, and there is no upstream `rknpu` driver you can build separately. The supported boards and their BSPs are:
+
+| SoC | Typical boards | BSP source |
+| --- | --- | --- |
+| `rk3588` | Orange Pi 5 / 5 Plus, Rock 5B, Radxa Rock 5A, FriendlyElec NanoPC-T6 | Vendor image (e.g. `orangepi-build`, `radxa-debian-bsp`) |
+| `rk3576` | Rock 4D, HDP-RK3576, Radxa NX5 | Vendor image |
+| `rk3568` | Rock 3A, Orange Pi 3B, Radxa CM3 | Vendor image |
+| `rk3566` | Rock 3C, ZeroTier RK3566 boards | Vendor image |
+
+On the BSP:
+
+1. Confirm the NPU device exists: `ls -l /dev/rknpu /dev/rknpu2 2>/dev/null`. You should see one (rk3588/rk3576/rk3568) or two (rk3588 dual-core NPU) device nodes owned by `root:render` or `root:video`. The `render`/`video` group is what the container needs write access to.
+2. Confirm `librknnrt.so` is shipped by the BSP. Most vendors put it in `/usr/lib/aarch64-linux-gnu/librknnrt.so`. If `ldconfig -p | grep rknnrt` is empty, the BSP is incomplete.
+3. Confirm the user running the container can read the NPU device (i.e. is in the `render` or `video` group, or you're running as root).
+
+#### Host packages
+
+The build image already contains everything Python-side. The host only needs:
+
+- A 64-bit ARM (aarch64) Linux kernel 5.10+ with the vendor's NPU driver loaded
+- `librknnrt.so` (vendored at build time from the BSP; the Dockerfile downloads a pinned copy at build time, but the host must have the matching driver)
+- `libgl1` and `libglib2.0-0` for OpenCV (pulled by the standard image)
+
+#### Device passthrough into the container
+
+The `mnemos-backend` service must have the NPU device bind-mounted. The compose block looks like this (apply it in both `docker-compose.yml` and `docker-compose.dev.yml` for the `mnemos-backend` service):
+
+```yaml
+    devices:
+      - /dev/rknpu:/dev/rknpu
+      - /dev/rknpu2:/dev/rknpu2   # only on rk3588 (dual-core NPU); omit on others
+    group_add:
+      - render                    # or "video", whichever the BSP uses
+    volumes:
+      - /usr/lib/aarch64-linux-gnu/librknnrt.so:/usr/lib/librknnrt.so:ro
+```
+
+The `:ro` mount of `librknnrt.so` is intentional: the in-container ctypes shim loads the **host's** RKNN runtime (so it always matches the host driver). The Dockerfile's vendored copy is only a fallback for `aarch64` builds on systems without a BSP at build time.
+
+#### Verifying
+
+```bash
+# On the host (BSP)
+ls -l /dev/rknpu* /usr/lib/aarch64-linux-gnu/librknnrt.so 2>/dev/null
+cat /proc/device-tree/compatible
+
+# From a throwaway container
+docker run --rm \
+  --device /dev/rknpu --device /dev/rknpu2 \
+  --group-add render \
+  -v /usr/lib/aarch64-linux-gnu/librknnrt.so:/usr/lib/librknnrt.so:ro \
+  ghcr.io/vithurshanselvarajah/mnemos-backend:latest-rockchip \
+  python -c "from ctypes import CDLL; CDLL('librknnrt.so'); print('ok')"
+
+# Full stack
+MNEMOS_PROVIDER=rockchip docker compose up -d
+docker compose logs -f mnemos-backend
+# Look for: provider=rockchip, GET /healthz → rockchip.npu_available: true
+```
+
+If `/dev/rknpu` is missing, the BSP kernel isn't loaded with the NPU driver. If the ctypes load fails with `cannot open shared object file`, the bind-mount path is wrong (the vendor's library path may differ).
 
 ## Picking a provider
 

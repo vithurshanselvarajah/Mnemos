@@ -55,6 +55,8 @@ jobs:
     name: Build (${{ matrix.provider }} / ${{ matrix.arch }})
     needs: resolve
     runs-on: ${{ matrix.runner }}
+    env:
+      SHOULD_PUSH: ${{ needs.resolve.outputs.should_push }}
     strategy:
       fail-fast: false
       matrix:
@@ -76,7 +78,9 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GitHub Container Registry
-        if: ${{ inputs.push }}
+        # Only authenticate when we're actually about to push. This keeps
+        # CI-only runs from exercising the registry token.
+        if: env.SHOULD_PUSH == 'true'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -93,7 +97,11 @@ jobs:
           context: ./mnemos-backend
           file: ./mnemos-backend/Dockerfile
           platforms: ${{ matrix.target }}
-          push: ${{ inputs.push }}
+          # Coerced to a real boolean via env so YAML 1.2 strict
+          # parsing accepts it. The action rejects expression-shaped
+          # values like ${{ inputs.push }}.
+          push: ${{ env.SHOULD_PUSH == 'true' }}
+          load: ${{ env.SHOULD_PUSH != 'true' }}
           tags: |
             ghcr.io/${{ github.repository_owner }}/mnemos-backend:${{ steps.version.outputs.version }}-${{ matrix.provider }}
             ghcr.io/${{ github.repository_owner }}/mnemos-backend:stable-${{ matrix.provider }}

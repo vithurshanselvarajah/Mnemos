@@ -2,13 +2,23 @@
 # CI — run on every push and PR
 # =============================================================================
 #
-# This workflow is intentionally minimal: it runs the test suite + lint
-# on the source tree, in parallel. It is the gate the release workflows
-# call via `uses: ./.github/workflows/ci.yml` before publishing images.
+# Job graph (gate-and-build):
+#
+#     lint
+#       │
+#       ▼
+#     test
+#       │
+#       ├─► build-images          (frontend + default backend sanity)
+#       └─► build-backend-matrix  (one row per (provider, arch) combo)
+#
+# - lint runs first on its own.
+# - test depends on lint, so a lint failure skips the whole suite.
+# - Both image-build jobs depend on test, so a broken test never
+#   wastes runner minutes on a doomed image build.
+# - Image builds never push — that's the release workflow's job.
 #
 # Reused by:
-#   - .github/workflows/release-backend.yml
-#   - .github/workflows/release-frontend.yml
 #   - .github/workflows/release-all.yml
 # =============================================================================
 
@@ -43,9 +53,6 @@ jobs:
           python -m pip install --only-binary=:all: "ruff==0.15.22"
 
       - name: Run ruff check
-        # `ruff.toml` at the repo root is auto-discovered when running
-        # from the repo root. We pass `--config ruff.toml` explicitly so
-        # the job works regardless of the working directory.
         run: python -m ruff check --config ruff.toml .
 
       - name: Run ruff format --check
@@ -53,6 +60,7 @@ jobs:
 
   test:
     name: Test
+    needs: lint
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -96,6 +104,7 @@ jobs:
 
   build-images:
     name: Build images (sanity)
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -125,3 +134,56 @@ jobs:
           tags: mnemos-frontend:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  build-backend-matrix:
+    name: Backend build (${{ matrix.provider }} / ${{ matrix.arch }})
+    needs: test
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - provider: cpu
+            arch: amd64
+            runner: ubuntu-26.04
+            target: linux/amd64
+            base_image: python:3.14-slim
+          - provider: cpu
+            arch: arm64
+            runner: ubuntu-26.04-arm
+            target: linux/arm64
+            base_image: python:3.14-slim
+          - provider: nvidia
+            arch: amd64
+            runner: ubuntu-26.04
+            target: linux/amd64
+            base_image: python:3.14-slim
+          - provider: rockchip
+            arch: arm64
+            runner: ubuntu-26.04-arm
+            target: linux/arm64
+            base_image: python:3.14-slim
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image (sanity, no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./mnemos-backend
+          file: ./mnemos-backend/Dockerfile
+          push: false
+          load: true
+          platforms: ${{ matrix.target }}
+          tags: mnemos-backend:ci-${{ matrix.provider }}-${{ matrix.arch }}
+          build-args: |
+            INSTALL_PROVIDER=${{ matrix.provider }}
+            BASE_IMAGE=${{ matrix.base_image }}
+          cache-from: type=gha,scope=ci-backend-${{ matrix.provider }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=ci-backend-${{ matrix.provider }}-${{ matrix.arch }}

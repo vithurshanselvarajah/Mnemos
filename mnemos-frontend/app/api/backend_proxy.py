@@ -221,7 +221,16 @@ def proxy_person_crop_delete(person_id: UUID, crop_id: UUID, request: Request):
     from app.services.backend_client import request
 
     r = request("DELETE", f"/api/v1/persons/{person_id}/crops/{crop_id}")
-    return Response(content=r.content, status_code=r.status_code, media_type="application/json")
+    if r.status_code >= 400:
+        return Response(
+            content=r.content,
+            status_code=r.status_code,
+            media_type="application/json",
+        )
+    # Success: return an empty body so the HTMX outerHTML swap on
+    # `#photo-{crop_id}` removes the element cleanly instead of replacing
+    # it with the raw JSON response.
+    return Response(status_code=200)
 
 
 @router.get("/keys")

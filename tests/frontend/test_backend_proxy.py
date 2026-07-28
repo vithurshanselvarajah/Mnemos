@@ -245,3 +245,56 @@ def test_is_admin_helper_for_admin(fe_setup):
             user = _User()
 
     assert _is_admin(_Req()) is True
+
+
+def test_proxy_person_crop_delete_success_returns_empty_body(admin_logged_in, monkeypatch):
+    _app, tc = admin_logged_in
+    resp = mock.Mock(status_code=200, content=b'{"ok":true,"deleted":"9a73bb11-36ca-455b-8634-0ee305c10cbb"}')
+
+    def _request(method, path, **kw):
+        assert method == "DELETE"
+        assert path.endswith("/persons/00000000-0000-0000-0000-000000000001/crops/00000000-0000-0000-0000-000000000002")
+        return resp
+
+    monkeypatch.setattr("app.services.backend_client.request", _request)
+    r = tc.delete(
+        "/backend/persons/00000000-0000-0000-0000-000000000001/crops/00000000-0000-0000-0000-000000000002"
+    )
+    assert r.status_code == 200
+    assert r.content == b""
+
+
+def test_proxy_person_crop_delete_backend_error_passes_through(admin_logged_in, monkeypatch):
+    _app, tc = admin_logged_in
+    resp = mock.Mock(status_code=404, content=b'{"detail":"crop not found"}')
+
+    def _request(method, path, **kw):
+        return resp
+
+    monkeypatch.setattr("app.services.backend_client.request", _request)
+    r = tc.delete(
+        "/backend/persons/00000000-0000-0000-0000-000000000001/crops/00000000-0000-0000-0000-000000000099"
+    )
+    assert r.status_code == 404
+    assert r.json() == {"detail": "crop not found"}
+
+
+def test_proxy_person_crop_delete_requires_admin(fe_setup, monkeypatch):
+    from app.core.auth import hash_password
+    from app.core.middleware import issue_session
+    from app.db.session import session_scope
+    from app.models.entities import BackendNode, User, UserRole
+
+    _app, tc = fe_setup
+    with session_scope() as s:
+        u = User(username="op", password_hash=hash_password("password"), role=UserRole.OPERATOR.value)
+        s.add(u)
+        s.add(BackendNode(name="b", base_url="http://b:8000", api_key="k"))
+        s.flush()
+        uid = u.id
+    token, _ = issue_session(uid, remember=True)
+    tc.cookies.set("mnemos_sid", token)
+    r = tc.delete(
+        "/backend/persons/00000000-0000-0000-0000-000000000001/crops/00000000-0000-0000-0000-000000000002"
+    )
+    assert r.status_code == 403

@@ -253,7 +253,9 @@ def test_proxy_person_crop_delete_success_returns_empty_body(admin_logged_in, mo
 
     def _request(method, path, **kw):
         assert method == "DELETE"
-        assert path.endswith("/persons/00000000-0000-0000-0000-000000000001/crops/00000000-0000-0000-0000-000000000002")
+        assert path.endswith(
+            "/persons/00000000-0000-0000-0000-000000000001/crops/00000000-0000-0000-0000-000000000002"
+        )
         return resp
 
     monkeypatch.setattr("app.services.backend_client.request", _request)

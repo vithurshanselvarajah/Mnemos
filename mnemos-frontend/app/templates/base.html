@@ -19,6 +19,20 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
 </head>
 <body hx-headers='{"X-Requested-With":"HTMX"}'>
+{% if user and backend_auth_failed %}
+<div class="backend-auth-banner" role="alert">
+  <div class="backend-auth-banner__icon" aria-hidden="true"><i class="fa-solid fa-triangle-exclamation"></i></div>
+  <div class="backend-auth-banner__text">
+    <strong>Stored backend key is invalid.</strong>
+    The backend may have been reset or its master key rotated. Calls to the backend will fail until you re-pair.
+  </div>
+  {% if is_admin %}
+  <a class="btn danger sm" href="/onboarding/repair">Re-pair with backend</a>
+  {% else %}
+  <span class="muted" style="font-size: .85em">Ask an admin to re-pair.</span>
+  {% endif %}
+</div>
+{% endif %}
 {% include "_nav.html" %}
   {% block body %}
   <main class="container">

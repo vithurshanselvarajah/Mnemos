@@ -85,20 +85,24 @@ def partial_provider_runtime(request: Request):
 
 @router.get("/backend-card", response_class=HTMLResponse)
 def partial_backend_card(request: Request):
-    backend_ok = True
-    backend_payload: dict = {}
-    try:
-        r = get_sync("/healthz")
-        backend_payload = r.json()
-        backend_ok = r.status_code == 200
-    except Exception as e:
+    from app.api.pages import _check_backend
+
+    state = _check_backend()
+    backend_ok = state["authenticated"]
+    backend_payload = state["payload"] or {}
+    if not state["reachable"]:
         backend_ok = False
-        backend_payload = {"error": str(e)}
+        backend_payload = {"error": "Backend unreachable"}
+    user = getattr(request.state, "user", None)
     return render(
         templates,
         request,
         "partials/backend_card.html",
-        {"backend_ok": backend_ok, "backend_payload": backend_payload},
+        {
+            "backend_ok": backend_ok,
+            "backend_payload": backend_payload,
+            "is_admin": user is not None and user.role == "Admin",
+        },
     )
 
 

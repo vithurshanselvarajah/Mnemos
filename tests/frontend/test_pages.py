@@ -301,3 +301,208 @@ def test_partials_ws_target_https(fe_setup):
     body = r.json()
     parsed = urlparse(body["ws_url"])
     assert parsed.hostname == "example.com"
+
+
+def test_check_backend_distinguishes_reachable_vs_authenticated(fe_setup):
+    from app.api.pages import _check_backend
+
+    _check_backend.__dict__.pop("_cache", None)
+    with (
+        mock.patch("app.api.pages.default_base_url", return_value="http://b:8000"),
+        mock.patch("app.api.pages.default_api_key", return_value="k"),
+    ):
+        # 200 = authenticated
+        with mock.patch(
+            "app.api.pages.get_sync",
+            return_value=mock.Mock(
+                status_code=200,
+                headers={"content-type": "application/json"},
+                json=lambda: {"model": "x", "model_loaded": True},
+            ),
+        ):
+            _check_backend.__dict__.pop("_cache", None)
+            s = _check_backend()
+            assert s["reachable"] is True
+            assert s["authenticated"] is True
+            assert s["payload"]["model"] == "x"
+        # 401 = reachable but key rejected
+        with mock.patch(
+            "app.api.pages.get_sync",
+            return_value=mock.Mock(
+                status_code=401, headers={"content-type": "application/json"}, json=lambda: {"detail": "bad"}
+            ),
+        ):
+            _check_backend.__dict__.pop("_cache", None)
+            s = _check_backend()
+            assert s["reachable"] is True
+            assert s["authenticated"] is False
+
+        # connection error = not reachable
+        def boom(*_a, **_kw):
+            raise ConnectionError("nope")
+
+        with mock.patch("app.api.pages.get_sync", side_effect=boom):
+            _check_backend.__dict__.pop("_cache", None)
+            s = _check_backend()
+            assert s["reachable"] is False
+            assert s["authenticated"] is False
+    _check_backend.__dict__.pop("_cache", None)
+
+
+def test_dashboard_shows_unreachable_when_key_rejected(logged_in_admin_with_backend):
+    from app.api.pages import _check_backend
+
+    _check_backend.__dict__.pop("_cache", None)
+    _app, tc = logged_in_admin_with_backend
+    with mock.patch(
+        "app.api.pages.get_sync",
+        return_value=mock.Mock(
+            status_code=401, headers={"content-type": "application/json"}, json=lambda: {"detail": "bad"}
+        ),
+    ):
+        r = tc.get("/dashboard")
+        assert r.status_code == 200
+        # The banner is rendered when backend_auth_failed
+        assert "Stored backend key is invalid" in r.text
+        assert "/onboarding/repair" in r.text
+    _check_backend.__dict__.pop("_cache", None)
+
+
+def test_dashboard_no_banner_when_auth_ok(logged_in_admin_with_backend):
+    from app.api.pages import _check_backend
+
+    _check_backend.__dict__.pop("_cache", None)
+    _app, tc = logged_in_admin_with_backend
+    with mock.patch(
+        "app.api.pages.get_sync",
+        return_value=mock.Mock(
+            status_code=200,
+            headers={"content-type": "application/json"},
+            json=lambda: {"model": "x", "model_loaded": True},
+        ),
+    ):
+        r = tc.get("/dashboard")
+        assert r.status_code == 200
+        assert "Stored backend key is invalid" not in r.text
+    _check_backend.__dict__.pop("_cache", None)
+
+
+def test_repair_get_requires_admin(logged_in_operator):
+    from app.db.session import session_scope
+    from app.models.entities import BackendNode
+
+    _app, tc = logged_in_operator
+    with session_scope() as s:
+        s.add(BackendNode(name="t", base_url="http://b:8000", api_key="k"))
+    r = tc.get("/onboarding/repair", follow_redirects=False)
+    assert r.status_code == 303
+    assert "/login" in r.headers["location"]
+
+
+def test_repair_get_admin_sees_form(logged_in_admin_with_backend):
+    _app, tc = logged_in_admin_with_backend
+    r = tc.get("/onboarding/repair")
+    assert r.status_code == 200
+    assert "Re-pair" in r.text
+    assert "Master pairing key" in r.text
+
+
+def test_repair_post_succeeds_and_replaces_node(logged_in_admin_with_backend, monkeypatch):
+    from app.db.session import session_scope
+    from app.models.entities import BackendNode
+
+    _app, tc = logged_in_admin_with_backend
+
+    def fake_pair(base, master, name):
+        from app.api.pages import _check_backend
+
+        with session_scope() as s:
+            for old in s.execute(select(BackendNode)).scalars().all():
+                s.delete(old)
+            s.add(BackendNode(name=name, base_url=base, api_key="newkey"))
+        _check_backend.__dict__.pop("_cache", None)
+        return {"raw_key": "newkey", "key_prefix": "mnemos_k"}, None
+
+    from sqlalchemy import select
+
+    monkeypatch.setattr("app.api.pages._perform_pair", fake_pair)
+    r = tc.post(
+        "/onboarding/repair",
+        data={"base_url": "http://new:8000", "master_key": "mnemos_master_x", "name": "Frontend"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert r.headers["location"] == "/onboarding/repair?ok=1"
+    with session_scope() as s:
+        nodes = s.execute(select(BackendNode)).scalars().all()
+        assert len(nodes) == 1
+        assert nodes[0].base_url == "http://new:8000"
+        assert nodes[0].api_key == "newkey"
+
+
+def test_repair_post_renders_error_on_failure(logged_in_admin_with_backend, monkeypatch):
+    _app, tc = logged_in_admin_with_backend
+
+    def fake_pair(base, master, name):
+        return None, "Invalid master key"
+
+    monkeypatch.setattr("app.api.pages._perform_pair", fake_pair)
+    r = tc.post(
+        "/onboarding/repair",
+        data={"base_url": "http://new:8000", "master_key": "wrong", "name": "Frontend"},
+    )
+    assert r.status_code == 400
+    assert "Invalid master key" in r.text
+    assert "Re-pair" in r.text
+
+
+def test_repair_post_rejects_operator(logged_in_operator):
+    from app.db.session import session_scope
+    from app.models.entities import BackendNode
+
+    _app, tc = logged_in_operator
+    with session_scope() as s:
+        s.add(BackendNode(name="t", base_url="http://b:8000", api_key="k"))
+    r = tc.post(
+        "/onboarding/repair",
+        data={"base_url": "http://new:8000", "master_key": "x", "name": "F"},
+    )
+    assert r.status_code == 403
+
+
+def test_backend_card_shows_stored_key_rejected(logged_in_admin_with_backend):
+    from app.api.pages import _check_backend
+
+    _check_backend.__dict__.pop("_cache", None)
+    _app, tc = logged_in_admin_with_backend
+    with mock.patch(
+        "app.api.pages.get_sync",
+        return_value=mock.Mock(
+            status_code=401, headers={"content-type": "application/json"}, json=lambda: {"detail": "bad"}
+        ),
+    ):
+        r = tc.get("/partials/backend-card")
+        assert r.status_code == 200
+        assert "Stored key rejected" in r.text
+        assert "/onboarding/repair" in r.text
+    _check_backend.__dict__.pop("_cache", None)
+
+
+def test_backend_card_shows_reachable_when_auth_ok(logged_in_admin_with_backend):
+    from app.api.pages import _check_backend
+
+    _check_backend.__dict__.pop("_cache", None)
+    _app, tc = logged_in_admin_with_backend
+    with mock.patch(
+        "app.api.pages.get_sync",
+        return_value=mock.Mock(
+            status_code=200,
+            headers={"content-type": "application/json"},
+            json=lambda: {"model": "buffalo_l", "model_loaded": True},
+        ),
+    ):
+        r = tc.get("/partials/backend-card")
+        assert r.status_code == 200
+        assert "Reachable" in r.text
+        assert "Stored key rejected" not in r.text
+    _check_backend.__dict__.pop("_cache", None)

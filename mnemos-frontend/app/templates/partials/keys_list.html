@@ -10,7 +10,7 @@
       <td><strong>{{ k.name }}</strong></td>
       <td><code>{{ k.key_prefix }}…</code></td>
       <td><span class="status {{ 'ok' if k.permission_level == 'Full-Admin' else 'info' }}">{{ k.permission_level }}</span></td>
-      <td class="muted"><small>{{ k.created_at[:16].replace('T', ' ') if k.created_at else '' }}</small></td>
+      <td class="muted"><small>{% if k.created_at is string %}{{ k.created_at[:16].replace('T', ' ') }}{% elif k.created_at %}{{ k.created_at.strftime('%Y-%m-%d %H:%M') }}{% endif %}</small></td>
       <td>{% if k.revoked_at %}<span class="status error">revoked</span>{% else %}<span class="status ok">active</span>{% endif %}</td>
       <td style="text-align:right; white-space:nowrap">
         {% if is_admin %}

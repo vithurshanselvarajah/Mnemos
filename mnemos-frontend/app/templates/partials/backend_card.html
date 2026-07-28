@@ -1,11 +1,23 @@
 <h3>Backend</h3>
 <div data-model-loaded="{% if backend_ok and backend_payload.get('model_loaded') %}true{% else %}false{% endif %}">
-  {% if not backend_ok %}
+  {% if not backend_ok and backend_payload.get('error') %}
     <span class="status error">Unreachable</span>
-  {% elif backend_payload.get('model_loaded') %}
-    <span class="status ok">Reachable</span>
+    <p class="muted" style="color: var(--error); margin-top: .25rem">{{ backend_payload.error }}</p>
+  {% elif backend_ok and not backend_payload.get('model_loaded') %}
+    <span class="status warn">Reachable · key OK · model not loaded</span>
+  {% elif not backend_ok %}
+    <span class="status error">Stored key rejected</span>
+    {% if is_admin %}
+    <p class="muted" style="color: var(--error); margin-top: .25rem">
+      The backend is reachable but our stored API key is invalid. <a href="/onboarding/repair">Re-pair with backend →</a>
+    </p>
+    {% else %}
+    <p class="muted" style="color: var(--error); margin-top: .25rem">
+      The backend is reachable but our stored API key is invalid. Ask an admin to re-pair.
+    </p>
+    {% endif %}
   {% else %}
-    <span class="status warn">Model not loaded</span>
+    <span class="status ok">Reachable</span>
   {% endif %}
   <p class="hint" style="margin-top: .5rem">Model: <code>{{ backend_payload.get('model','—') }}</code></p>
   {% if backend_ok and not backend_payload.get('model_loaded') %}

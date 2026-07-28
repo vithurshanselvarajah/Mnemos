@@ -36,6 +36,40 @@ def _has_backend() -> bool:
     return default_api_key() is not None
 
 
+def _check_backend() -> dict:
+    import time
+
+    now = time.time()
+    cached = _check_backend.__dict__.get("_cache")
+    if cached and now - cached["at"] < 5:
+        return cached["value"]
+    base = default_base_url()
+    key = default_api_key()
+    result: dict = {"reachable": False, "authenticated": False, "payload": {}}
+    if not base or not key:
+        _check_backend._cache = {"at": now, "value": result}
+        return result
+    try:
+        r = get_sync("/api/v1/models", timeout=3.0)
+        result["reachable"] = r.status_code in (200, 401, 403)
+        result["authenticated"] = r.status_code == 200
+        try:
+            payload = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+        except Exception:
+            payload = {}
+        # Normalize: /api/v1/models returns "loaded", /healthz returns
+        # "model_loaded". Templates and tests use both keys; expose both.
+        if "loaded" in payload and "model_loaded" not in payload:
+            payload["model_loaded"] = payload["loaded"]
+        if "name" in payload and "model" not in payload:
+            payload["model"] = payload["name"]
+        result["payload"] = payload
+    except Exception as e:
+        result["payload"] = {"error": str(e)}
+    _check_backend._cache = {"at": now, "value": result}
+    return result
+
+
 def _admin_or_redirect(request: Request):
     user = getattr(request.state, "user", None)
     if user is not None and user.role == "Admin":
@@ -45,11 +79,17 @@ def _admin_or_redirect(request: Request):
 
 def _ctx(request: Request, **extra) -> dict:
     user = getattr(request.state, "user", None)
+    backend_state = (
+        _check_backend() if _has_backend() else {"reachable": False, "authenticated": False, "payload": {}}
+    )
     return {
         "request": request,
         "user": user,
         "is_admin": user is not None and user.role == "Admin",
         "backend_configured": _has_backend(),
+        "backend_reachable": backend_state["reachable"],
+        "backend_auth_ok": backend_state["authenticated"],
+        "backend_auth_failed": _has_backend() and not backend_state["authenticated"],
         "has_admin": _has_admin(),
         "settings": settings,
         "app_version": get_version(),
@@ -130,40 +170,8 @@ def onboarding_backend(
     master_key: str = Form(...),
     name: str = Form(default="Frontend"),
 ):
-    import httpx2 as httpx
-
-    error_message: str | None = None
-    try:
-        with httpx.Client(timeout=10) as client:
-            r = client.post(
-                f"{base_url.rstrip('/')}/api/v1/system/pair",
-                json={"master_key": master_key.strip(), "name": name},
-            )
-        if r.status_code != 200:
-            try:
-                payload = r.json()
-                error_message = (
-                    payload.get("detail")
-                    if isinstance(payload, dict) and isinstance(payload.get("detail"), str)
-                    else f"Pairing failed (HTTP {r.status_code})"
-                )
-            except Exception:
-                error_message = f"Pairing failed (HTTP {r.status_code})"
-            return render(
-                templates,
-                request,
-                "onboarding.html",
-                _ctx(
-                    request,
-                    step="backend",
-                    error=error_message,
-                    form_values={"base_url": base_url, "master_key": master_key, "name": name},
-                    warmup=dict(_warmup_state),
-                ),
-                status_code=400,
-            )
-        data = r.json()
-    except Exception as e:
+    _data, err = _perform_pair(base_url, master_key, name)
+    if err is not None:
         return render(
             templates,
             request,
@@ -171,12 +179,39 @@ def onboarding_backend(
             _ctx(
                 request,
                 step="backend",
-                error=f"Pairing failed: {e}",
+                error=err,
                 form_values={"base_url": base_url, "master_key": master_key, "name": name},
                 warmup=dict(_warmup_state),
             ),
             status_code=400,
         )
+    return RedirectResponse("/onboarding", status_code=303)
+
+
+def _perform_pair(base_url: str, master_key: str, name: str) -> tuple[dict | None, str | None]:
+    import httpx2 as httpx
+
+    base = base_url.strip().rstrip("/")
+    try:
+        with httpx.Client(timeout=10) as client:
+            r = client.post(
+                f"{base}/api/v1/system/pair",
+                json={"master_key": master_key.strip(), "name": name},
+            )
+        if r.status_code != 200:
+            try:
+                payload = r.json()
+                err = (
+                    payload.get("detail")
+                    if isinstance(payload, dict) and isinstance(payload.get("detail"), str)
+                    else f"Pairing failed (HTTP {r.status_code})"
+                )
+            except Exception:
+                err = f"Pairing failed (HTTP {r.status_code})"
+            return None, err
+        data = r.json()
+    except Exception as e:
+        return None, f"Pairing failed: {e}"
 
     with session_scope() as s:
         for old in s.execute(select(BackendNode)).scalars().all():
@@ -184,15 +219,14 @@ def onboarding_backend(
         s.add(
             BackendNode(
                 name=name,
-                base_url=base_url.strip().rstrip("/"),
+                base_url=base,
                 api_key=data["raw_key"],
             )
         )
 
-    import threading
+    _check_backend.__dict__.pop("_cache", None)
 
     api_key = data["raw_key"]
-    base = base_url.strip().rstrip("/")
 
     def _warmup() -> None:
         _warmup_state["running"] = True
@@ -212,10 +246,53 @@ def onboarding_backend(
             _warmup_state["running"] = False
             _warmup_state["done"] = True
 
-    t = threading.Thread(target=_warmup, name="mnemos-onboard-warmup", daemon=True)
-    t.start()
+    import threading
 
-    return RedirectResponse("/onboarding", status_code=303)
+    t = threading.Thread(target=_warmup, name="mnemos-repair-warmup", daemon=True)
+    t.start()
+    return data, None
+
+
+@router.get("/onboarding/repair", response_class=HTMLResponse)
+def onboarding_repair_get(request: Request):
+    user = getattr(request.state, "user", None)
+    if user is None or user.role != UserRole.ADMIN.value:
+        return RedirectResponse("/login?next=/onboarding/repair", status_code=303)
+    with session_scope() as s:
+        node = s.execute(select(BackendNode).order_by(BackendNode.created_at.asc())).scalars().first()
+    return render(
+        templates,
+        request,
+        "onboarding_repair.html",
+        _ctx(request, current_node=node, warmup=dict(_warmup_state)),
+    )
+
+
+@router.post("/onboarding/repair")
+def onboarding_repair_post(
+    request: Request,
+    base_url: str = Form(...),
+    master_key: str = Form(...),
+    name: str = Form(default="Frontend"),
+):
+    user = getattr(request.state, "user", None)
+    if user is None or user.role != UserRole.ADMIN.value:
+        raise HTTPException(status_code=403, detail="Admin only")
+    _data, err = _perform_pair(base_url, master_key, name)
+    if err is not None:
+        return render(
+            templates,
+            request,
+            "onboarding_repair.html",
+            _ctx(
+                request,
+                error=err,
+                form_values={"base_url": base_url, "master_key": master_key, "name": name},
+                warmup=dict(_warmup_state),
+            ),
+            status_code=400,
+        )
+    return RedirectResponse("/onboarding/repair?ok=1", status_code=303)
 
 
 _warmup_state: dict = {"running": False, "done": False, "error": None}
@@ -267,15 +344,12 @@ def logout(request: Request):
 def dashboard(request: Request):
     if not _has_backend():
         return RedirectResponse("/onboarding", status_code=303)
-    backend_ok = True
-    backend_payload: dict = {}
-    try:
-        r = get_sync("/healthz")
-        backend_payload = r.json()
-        backend_ok = r.status_code == 200
-    except Exception as e:
+    backend_state = _check_backend()
+    backend_ok = backend_state["authenticated"]
+    backend_payload = backend_state["payload"] or {}
+    if not backend_state["reachable"]:
         backend_ok = False
-        backend_payload = {"error": str(e)}
+        backend_payload = {"error": "Backend unreachable"}
     return render(
         templates,
         request,

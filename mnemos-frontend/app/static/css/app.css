@@ -229,6 +229,19 @@ pre code { background: transparent; padding: 0; color: inherit; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+.backend-auth-banner {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.75rem 1.25rem;
+  background: #fef2f2;
+  color: #7f1d1d;
+  border-bottom: 1px solid #fecaca;
+  font-size: 0.92em;
+  flex-wrap: wrap;
+}
+.backend-auth-banner__icon { color: var(--error); font-size: 1.1em; }
+.backend-auth-banner__text { flex: 1 1 auto; min-width: 240px; }
+.backend-auth-banner a.btn.danger.sm { white-space: nowrap; }
+
 .site-footer {
   max-width: 1200px;
   width: 100%;

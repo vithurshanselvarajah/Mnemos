@@ -2,6 +2,8 @@ Mnemos-Frontend
 - New model download interface. 
 - Add cache busting mechanism to certain static files
 - Fix json response showing when deleting images from persons.
+- Pairing key is now removed from API key list to prevent accidental deletion. 
+- Add ability to re-pair backend if key is recycled or backend is deleted. 
 
 Mnemos-Backend
 - split into cpu, rockchip & nvidea variants

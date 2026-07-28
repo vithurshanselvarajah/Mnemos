@@ -410,7 +410,7 @@ tbody tr:hover { background: var(--bg-sunken); }
 .gallery-footer { display: flex; gap: 0.75rem; align-items: center; padding: 1rem 0; color: var(--fg-muted); }
 
 
-.auth-shell { min-height: 100vh; display: grid; grid-template-columns: 1.1fr 1fr; background: var(--bg); }
+.auth-shell { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 1.1fr 1fr; background: var(--bg); }
 .auth-shell .brand-panel {
   background:
     radial-gradient(ellipse at top left, rgba(99, 102, 241, .35), transparent 60%),

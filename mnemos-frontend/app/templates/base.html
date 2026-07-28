@@ -7,13 +7,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/app.css" />
-  <link rel="stylesheet" href="/static/css/inbox.css" />
+  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}" />
+  <link rel="stylesheet" href="/static/css/inbox.css?v={{ app_version }}" />
   <script src="/static/vendor/htmx.min.js" defer></script>
   <script src="/static/vendor/ws.min.js" defer></script>
   <script src="/static/vendor/json-enc.js" defer></script>
-  <script src="/static/js/app.js" defer></script>
-  <script src="/static/js/alpine-components.js" defer></script>
+  <script src="/static/js/app.js?v={{ app_version }}" defer></script>
+  <script src="/static/js/alpine-components.js?v={{ app_version }}" defer></script>
   <script src="/static/vendor/alpine.min.js" defer></script>
   <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%234f46e5'/><stop offset='1' stop-color='%2306b6d4'/></linearGradient></defs><rect width='32' height='32' rx='8' fill='url(%23g)'/><circle cx='16' cy='12' r='5' fill='white'/><path d='M6 26c0-5.5 4.5-10 10-10s10 4.5 10 10' fill='white'/></svg>" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
@@ -38,6 +38,5 @@
        hx-trigger="load"
        hx-swap="none"
        style="display:none"></div>
-  <script src="/static/js/app.js" defer></script>
 </body>
 </html>

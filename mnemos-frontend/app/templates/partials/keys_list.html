@@ -1,4 +1,5 @@
 {% if keys %}
+<div class="table-wrap">
 <table>
   <thead>
     <tr><th>Name</th><th>Prefix</th><th>Permission</th><th>Created</th><th>Status</th><th></th></tr>
@@ -9,7 +10,7 @@
       <td><strong>{{ k.name }}</strong></td>
       <td><code>{{ k.key_prefix }}…</code></td>
       <td><span class="status {{ 'ok' if k.permission_level == 'Full-Admin' else 'info' }}">{{ k.permission_level }}</span></td>
-      <td class="muted"><small>{{ k.created_at }}</small></td>
+      <td class="muted"><small>{{ k.created_at[:16].replace('T', ' ') if k.created_at else '' }}</small></td>
       <td>{% if k.revoked_at %}<span class="status error">revoked</span>{% else %}<span class="status ok">active</span>{% endif %}</td>
       <td style="text-align:right; white-space:nowrap">
         {% if is_admin %}
@@ -28,6 +29,7 @@
     {% endfor %}
   </tbody>
 </table>
+</div>
 {% else %}
   <div class="empty-state">
     <h3>No API keys</h3>

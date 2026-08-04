@@ -198,9 +198,7 @@ async def partial_backup_restore(request: Request):
     except Exception as e:
         return HTMLResponse(f"<div class='error'>backend unreachable: {e}</div>", status_code=502)
     if r.status_code == 409:
-        return HTMLResponse(
-            "<div class='error'>A restore is already in progress.</div>", status_code=409
-        )
+        return HTMLResponse("<div class='error'>A restore is already in progress.</div>", status_code=409)
     if r.status_code >= 400:
         try:
             payload = r.json()

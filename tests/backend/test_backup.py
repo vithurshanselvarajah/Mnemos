@@ -18,6 +18,7 @@ def backend_env_for_backup(backend_imports, tmp_path, monkeypatch):
 @pytest.fixture
 def mock_pg(backend_env_for_backup, monkeypatch):
     from app import backup as backup_mod
+
     monkeypatch.setattr(backup_mod, "_pg_dumpall", lambda dest: dest.write_text("-- mock pg\n"))
     monkeypatch.setattr(backup_mod, "_pg_restore", lambda sql: None)
 
@@ -47,7 +48,9 @@ def test_backup_create_list_inspect_delete(backend_env_for_backup, monkeypatch):
     _make_sqlite(backend_db)
     _make_crops(crops_dir)
 
-    monkeypatch.setattr(backup_mod, "_pg_dumpall", lambda dest: dest.write_text("-- mock pg\nCREATE TABLE x();\n"))
+    monkeypatch.setattr(
+        backup_mod, "_pg_dumpall", lambda dest: dest.write_text("-- mock pg\nCREATE TABLE x();\n")
+    )
 
     out_path = bk_dir / "mnemos-backup-20260101-000000.tar.gz"
     result = backup_mod.create_backup_tarball(
@@ -132,7 +135,10 @@ def test_safe_filename_rejects_path_traversal(backend_imports):
         backup_mod._safe_filename("../etc/passwd")
     with pytest.raises(ValueError):
         backup_mod._safe_filename("not-a-backup.tar.gz")
-    assert backup_mod._safe_filename("mnemos-backup-20260101-000000.tar.gz") == "mnemos-backup-20260101-000000.tar.gz"
+    assert (
+        backup_mod._safe_filename("mnemos-backup-20260101-000000.tar.gz")
+        == "mnemos-backup-20260101-000000.tar.gz"
+    )
 
 
 def test_backup_dir_creates_directory(backend_imports, tmp_path, monkeypatch):
@@ -198,6 +204,7 @@ def test_restore_replaces_crops(backend_env_for_backup, mock_pg, monkeypatch, tm
             f.unlink()
         elif f.is_dir():
             import shutil
+
             shutil.rmtree(f)
     assert not list(crops_dir.iterdir())
 
@@ -313,6 +320,7 @@ def test_restore_job_rejects_concurrent(backend_env_for_backup, mock_pg, monkeyp
     def slow_restore(*args, **kwargs):
         started.append(1)
         import time
+
         time.sleep(0.5)
         return original_restore(*args, **kwargs)
 

@@ -32,6 +32,7 @@ async def lifespan(app: FastAPI):
             row = s.execute(select(BackupSettings).order_by(BackupSettings.id)).scalars().first()
             if row is not None and row.enabled and row.next_run_at is None:
                 from datetime import datetime
+
                 row.next_run_at = compute_next_run_at(row, datetime.utcnow())
     except Exception as e:
         log.warning("could not prime backup schedule: %s", e)

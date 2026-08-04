@@ -125,7 +125,9 @@ def list_backups() -> list[BackupMetadata]:
         except Exception as e:
             log.warning("skipping unreadable backup %s: %s", entry.name, e)
             continue
-        out.append(BackupMetadata(filename=entry.name, size_bytes=stat.st_size, created_at=created, sha256=sha))
+        out.append(
+            BackupMetadata(filename=entry.name, size_bytes=stat.st_size, created_at=created, sha256=sha)
+        )
     out.sort(key=lambda b: b.created_at, reverse=True)
     return out
 
@@ -175,11 +177,15 @@ def _backup_sqlite(src_db: Path, dest_db: Path) -> None:
 
 
 def _pg_dumpall(dest_sql: Path) -> None:
-    dsn = os.environ.get("MNEMOS_VECTOR_DSN", "postgresql://mnemos:mnemos@mnemos-vector-db:5432/mnemos_vectors")
+    dsn = os.environ.get(
+        "MNEMOS_VECTOR_DSN", "postgresql://mnemos:mnemos@mnemos-vector-db:5432/mnemos_vectors"
+    )
     dest_sql.parent.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
     env.setdefault("PGCONNECT_TIMEOUT", "10")
-    r = subprocess.run(["pg_dumpall", "-d", dsn, "--no-role-passwords"], capture_output=True, text=True, env=env)
+    r = subprocess.run(
+        ["pg_dumpall", "-d", dsn, "--no-role-passwords"], capture_output=True, text=True, env=env
+    )
     if r.returncode != 0:
         raise RuntimeError(f"pg_dumpall failed: {r.stderr.strip()}")
     dest_sql.write_text(r.stdout, encoding="utf-8")
@@ -318,10 +324,18 @@ def delete_backup(filename: str) -> None:
 
 
 def _pg_restore(pg_sql_text: str) -> None:
-    dsn = os.environ.get("MNEMOS_VECTOR_DSN", "postgresql://mnemos:mnemos@mnemos-vector-db:5432/mnemos_vectors")
+    dsn = os.environ.get(
+        "MNEMOS_VECTOR_DSN", "postgresql://mnemos:mnemos@mnemos-vector-db:5432/mnemos_vectors"
+    )
     env = os.environ.copy()
     env.setdefault("PGCONNECT_TIMEOUT", "10")
-    r = subprocess.run(["psql", "-d", dsn, "-v", "ON_ERROR_STOP=1", "-q"], input=pg_sql_text, capture_output=True, text=True, env=env)
+    r = subprocess.run(
+        ["psql", "-d", dsn, "-v", "ON_ERROR_STOP=1", "-q"],
+        input=pg_sql_text,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
     if r.returncode != 0:
         raise RuntimeError(f"psql restore failed: {r.stderr.strip()}")
 
@@ -454,7 +468,9 @@ class RestoreJob:
         self.filename = filename
         self.status = "running"
         self._append(f"restore job started for {filename}")
-        self._thread = threading.Thread(target=self._run, kwargs=kwargs, daemon=True, name=f"mnemos-restore-{self.id}")
+        self._thread = threading.Thread(
+            target=self._run, kwargs=kwargs, daemon=True, name=f"mnemos-restore-{self.id}"
+        )
         self._thread.start()
 
     def _run(self, **kwargs) -> None:

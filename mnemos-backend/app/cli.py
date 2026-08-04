@@ -37,7 +37,16 @@ def cmd_healthz(args) -> int:
 
 def cmd_backup_list(_args) -> int:
     out = [b.as_dict() for b in backup_mod.list_backups()]
-    print(json.dumps({"backups": out, "free_bytes": backup_mod.disk_free_bytes(), "total_bytes": backup_mod.disk_total_bytes()}, indent=2))
+    print(
+        json.dumps(
+            {
+                "backups": out,
+                "free_bytes": backup_mod.disk_free_bytes(),
+                "total_bytes": backup_mod.disk_total_bytes(),
+            },
+            indent=2,
+        )
+    )
     return 0
 
 

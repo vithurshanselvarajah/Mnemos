@@ -108,7 +108,9 @@ def list_backups() -> list[LocalBackupMetadata]:
         except Exception as e:
             log.warning("skipping unreadable backup %s: %s", entry.name, e)
             continue
-        out.append(LocalBackupMetadata(filename=entry.name, size_bytes=stat.st_size, created_at=created, sha256=sha))
+        out.append(
+            LocalBackupMetadata(filename=entry.name, size_bytes=stat.st_size, created_at=created, sha256=sha)
+        )
     out.sort(key=lambda b: b.created_at, reverse=True)
     return out
 

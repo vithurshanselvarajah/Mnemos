@@ -129,6 +129,8 @@ def test_backup_file_unique_filename(fe_db):
     except sqlalchemy.exc.IntegrityError:
         raised = True
     except Exception as e:
-        assert "UNIQUE constraint failed" in str(e) or "IntegrityError" in type(e).__name__, f"unexpected: {e!r}"
+        assert "UNIQUE constraint failed" in str(e) or "IntegrityError" in type(e).__name__, (
+            f"unexpected: {e!r}"
+        )
         raised = True
     assert raised, "expected duplicate filename to raise an integrity error"

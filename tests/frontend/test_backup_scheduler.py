@@ -121,7 +121,9 @@ async def test_scheduler_loop_creates_when_due_and_prunes(fe_settings, monkeypat
         list_calls["n"] += 1
         items = []
         for p in sorted(backup_dir.iterdir(), reverse=True):
-            items.append({"filename": p.name, "size_bytes": p.stat().st_size, "created_at": "now", "sha256": ""})
+            items.append(
+                {"filename": p.name, "size_bytes": p.stat().st_size, "created_at": "now", "sha256": ""}
+            )
         return _FakeResponse(200, {"backups": items})
 
     def fake_delete(name):
@@ -134,6 +136,7 @@ async def test_scheduler_loop_creates_when_due_and_prunes(fe_settings, monkeypat
     monkeypatch.setattr(backup_scheduler, "backup_create", fake_create)
     monkeypatch.setattr(backup_scheduler, "backup_list", fake_list)
     from app.services import backend_client
+
     monkeypatch.setattr(backend_client, "backup_delete", fake_delete)
 
     import asyncio
@@ -149,7 +152,7 @@ async def test_scheduler_loop_creates_when_due_and_prunes(fe_settings, monkeypat
         stop.set()
         try:
             await asyncio.wait_for(task, timeout=2.0)
-        except (TimeoutError, asyncio.CancelledError, Exception):
+        except TimeoutError, asyncio.CancelledError, Exception:
             pass
 
     assert create_calls["n"] >= 1
@@ -188,7 +191,7 @@ async def test_scheduler_loop_idles_when_disabled(fe_settings, monkeypatch, tmp_
         stop.set()
         try:
             await asyncio.wait_for(task, timeout=2.0)
-        except (TimeoutError, asyncio.CancelledError, Exception):
+        except TimeoutError, asyncio.CancelledError, Exception:
             pass
 
     assert create_calls["n"] == 0

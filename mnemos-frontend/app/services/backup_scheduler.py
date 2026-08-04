@@ -29,7 +29,12 @@ def _next_run(now: datetime, *, cadence: str, hour_utc: int, weekday_utc: int) -
 
 
 def compute_next_run_at(settings: BackupSettings, now: datetime | None = None) -> datetime:
-    return _next_run(now or datetime.utcnow(), cadence=settings.cadence, hour_utc=settings.hour_utc, weekday_utc=settings.weekday_utc)
+    return _next_run(
+        now or datetime.utcnow(),
+        cadence=settings.cadence,
+        hour_utc=settings.hour_utc,
+        weekday_utc=settings.weekday_utc,
+    )
 
 
 async def _run_scheduler_loop(stop_event: asyncio.Event) -> None:
@@ -58,6 +63,7 @@ async def _run_scheduler_loop(stop_event: asyncio.Event) -> None:
                                         continue
                                     try:
                                         from app.services.backend_client import backup_delete
+
                                         backup_delete(name)
                                     except Exception as e:
                                         log.warning("scheduled delete of %s failed: %s", name, e)
@@ -73,7 +79,9 @@ async def _run_scheduler_loop(stop_event: asyncio.Event) -> None:
                             log.warning("local retention listing failed: %s", e)
                 except Exception as e:
                     log.warning("scheduled backup request failed: %s", e)
-                next_dt = _next_run(datetime.utcnow(), cadence=row.cadence, hour_utc=row.hour_utc, weekday_utc=row.weekday_utc)
+                next_dt = _next_run(
+                    datetime.utcnow(), cadence=row.cadence, hour_utc=row.hour_utc, weekday_utc=row.weekday_utc
+                )
                 with session_scope() as s:
                     cur = s.get(BackupSettings, row.id)
                     if cur is not None:

@@ -8,6 +8,7 @@ management interface for labeling unrecognized faces.
 
 - **Backend** (`mnemos-backend`) — FastAPI + InsightFace (CPU via ONNX Runtime) + pgvector.
 - **Frontend** (`mnemos-frontend`) — FastAPI + Jinja2 + HTMX + Alpine.js management UI.
+- **Backup & restore** — Built-in. Create, list, download, upload, and restore full-system snapshots from **Settings → Backup & restore**. Optional daily / weekly scheduler with retention.
 
 ## Documentation
 

@@ -444,6 +444,19 @@ def swagger_page(request: Request):
     return render(templates, request, "swagger.html", _ctx(request))
 
 
+@router.get("/backup", response_class=HTMLResponse)
+def backup_page(request: Request):
+    if (resp := _admin_or_redirect(request)) is not None:
+        return resp
+    from sqlalchemy import select
+
+    from app.models.entities import BackupSettings
+
+    with session_scope() as s:
+        sched = s.execute(select(BackupSettings).order_by(BackupSettings.id)).scalars().first()
+    return render(templates, request, "backup.html", _ctx(request, sched=sched))
+
+
 @router.get("/api", response_class=HTMLResponse)
 def api_alias(request: Request):
     return swagger_page(request)

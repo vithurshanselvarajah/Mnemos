@@ -5,7 +5,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from app.api import backend_proxy, health, pages, partials, ws_proxy, ws_target
+from app.api import backend_proxy, health, pages, partials, partials_backup, ws_proxy, ws_target
 from app.core.config import settings
 from app.core.events import lifespan
 from app.core.logging import configure_logging
@@ -26,6 +26,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(pages.router)
     app.include_router(partials.router)
+    app.include_router(partials_backup.router)
     app.include_router(ws_target.router)
     app.include_router(ws_proxy.router)
     app.include_router(backend_proxy.router, prefix="/backend")

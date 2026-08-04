@@ -35,6 +35,7 @@ services:
       MNEMOS_PROVIDER: ${MNEMOS_PROVIDER:-cpu}
       MNEMOS_DB_PATH: /data/backend.db
       MNEMOS_CROPS_DIR: /data/crops
+      MNEMOS_BACKUP_DIR: /data/backups
       MNEMOS_VECTOR_DSN: postgresql://mnemos:${MNEMOS_PG_PASSWORD:-mnemos-pgvector-changeme}@mnemos-vector-db:5432/mnemos_vectors
       MNEMOS_DEFAULT_MODEL: ${MNEMOS_DEFAULT_MODEL:-buffalo_s}
       MNEMOS_DET_SIZE: 640

@@ -186,6 +186,42 @@ Single uvicorn worker, single process, all events go to all clients. The complex
 
 ---
 
+## `backup.py`
+
+The workhorse for full-system snapshots. Pure stdlib: `tarfile`, `sqlite3`, `subprocess`, `hashlib`. Drives both the CLI subcommands and the `/api/v1/backup/*` routes.
+
+### Layout
+
+```
+manifest.json   # version, app_version, created_at, contents.{backend_db_sha, crops_sha, pg_sha, frontend_db_sha}
+backend.db      # sqlite3 .backup output
+crops.tar       # tar of /data/crops
+pg.sql          # pg_dumpall output
+frontend.db     # (optional) sqlite3 .backup output
+```
+
+### Key functions
+
+| Function | Purpose |
+| --- | --- |
+| `backup_dir() -> Path` | Resolves `MNEMOS_BACKUP_DIR` (default `/data/backups`), creates if missing |
+| `list_backups() -> list[BackupMetadata]` | Disk scan, returns sorted by created_at desc |
+| `create_backup_tarball(...)` | Builds a fresh `.tar.gz` from the configured paths; writes to `out_path` or the default location |
+| `restore_backup(filename, *, backend_db_dest, crops_dir_dest, ...)` | Atomic replace of SQLite + crops; psql restore of pgvector |
+| `inspect_backup(filename) -> dict` | Returns the parsed `manifest.json` + the file's sha256 |
+| `delete_backup(filename)` | Removes the file from disk |
+| `start_restore_job(filename, ...) -> RestoreJob` | Spawns a background thread; one job at a time |
+
+### Why `pg_dumpall` and not `pg_basebackup`
+
+`pg_dumpall` produces a plain SQL file. It's portable, easy to verify (`pg.sql` is just text), and small enough to bundle inside a tarball. `pg_basebackup` is faster but produces a binary directory that would not fit cleanly inside our tarball structure. For the home workload the dump speed is irrelevant.
+
+### Why `sqlite3 .backup` instead of `cp`
+
+A `cp` of a running SQLite database can capture a torn page. `.backup` is the documented safe path: it uses SQLite's online backup API to take a consistent snapshot while the database is in use. Both the backend and frontend images install the `sqlite3` CLI so this works even when Python's sqlite3 binding is unavailable (e.g. from the CLI on Alpine or slim images).
+
+---
+
 ## Other services
 
 A few modules that don't fit the "service" framing but are useful to know about:
@@ -195,3 +231,45 @@ A few modules that don't fit the "service" framing but are useful to know about:
 - **`app.core.events.lifespan`** — FastAPI lifespan that warms up the engine on startup and dumps a final log line on shutdown.
 - **`app.db.session`** — `init_db()`, `reset_engine()`, `session_scope()`. The single source of truth for the SQLModel engine.
 - **`app.providers.base`** — `InferenceEngine` Protocol, `Detection` dataclass, `ProviderNotAvailable` exception. The contract every provider implements.
+
+---
+
+## Frontend backup orchestrator
+
+The frontend ships three small modules that wrap the backend's backup API:
+
+### `app.services.backup_local`
+
+Pure-stdlib helpers for the frontend's own SQLite and the local copy of uploaded backups.
+
+| Function | Purpose |
+| --- | --- |
+| `backup_dir() -> Path` | Resolves `MNEMOS_FE_BACKUP_DIR` (default `<frontend.db dir>/backups/`), creates if missing |
+| `snapshot_frontend_db(dest: Path)` | `sqlite3 .backup` of the live frontend DB into `dest` |
+| `list_backups() -> list[LocalBackupMetadata]` | Disk scan, sorted by created_at desc |
+| `save_uploaded_backup(name, src)` | Copies an uploaded `.tar.gz` into `backup_dir()` |
+| `delete_backup(name)` | Removes a local backup file |
+| `is_valid_filename(name) -> bool` | Strict regex check against `mnemos-backup-\d{8}-\d{6}\.tar\.gz` |
+
+### `app.services.backup_scheduler`
+
+Single asyncio task started in the FastAPI lifespan. Reads the `BackupSettings` row from the frontend SQLite, computes the next due time, and calls `backend_client.backup_create()` when due. After each successful create, it deletes the oldest entries on both the backend (via the proxy) and the local cache to honour `retention_count`.
+
+`compute_next_run_at(settings, now)` is exposed so the UI can show a human-readable "next run at" without re-deriving the math.
+
+### `app.api.partials_backup`
+
+HTMX-driven partials consumed by `/backup`:
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /partials/backup/list` | HTML table of backups (backend + locally uploaded) |
+| `POST /partials/backup/create` | Creates a new backup via the backend |
+| `POST /partials/backup/upload` | Stores an uploaded `.tar.gz` and registers it in `BackupFile` |
+| `DELETE /partials/backup/{filename}` | Removes the backup from disk |
+| `GET /partials/backup/download/{filename}` | Streams the file (local first, falls back to the backend) |
+| `POST /partials/backup/restore` | Two-step form: `filename` + `confirm=on`. 202 + polling. |
+| `GET /partials/backup/restore-status/{job_id}` | Polls the backend; updates the partial in place |
+| `GET /partials/backup/settings` / `POST /partials/backup/schedule` | Read / write the `BackupSettings` row |
+
+All endpoints are admin-gated via `require_admin(request)`. The route also requires a paired backend (`BackendNode` row) before backup operations that hit the backend.

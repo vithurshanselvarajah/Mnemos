@@ -17,10 +17,11 @@ Mnemos stores state in four places. This page describes each one, what's in it, 
 | Store | Where | What's in it | Default size |
 | --- | --- | --- | --- |
 | `backend.db` | `mnemos/backend/backend.db` | Persons, face crops metadata, API keys, master key, system settings | < 1 MB even with 10k persons |
-| `frontend.db` | `mnemos/frontend/frontend.db` | Users, sessions, audit log | < 1 MB |
+| `frontend.db` | `mnemos/frontend/frontend.db` | Users, sessions, audit log, backup settings | < 1 MB |
 | pgvector | `mnemos/vector-db/` | 512-D embeddings per (person, model) | ~1 MB per 1k persons per model |
 | `crops/` | `mnemos/backend/crops/` | Cropped face JPEGs | ~50 KB each |
 | `models/` | `mnemos/backend/models/` | Downloaded ONNX/RKNN weights | 300 MB - 1 GB per model |
+| `backups/` | `mnemos/backend/backups/` | Generated `.tar.gz` snapshots of the system (see [Backup & Restore](Backup-Restore.md)) | Grows with `retention_count` × backup size |
 
 The host paths are created by the default compose file's bind mounts. The in-container paths are `/data/backend.db`, `/data/frontend.db`, `/var/lib/postgresql`, `/data/crops`, `/data/models`.
 

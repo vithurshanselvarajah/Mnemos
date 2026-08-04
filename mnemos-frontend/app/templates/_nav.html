@@ -52,6 +52,10 @@
         <span class="mi-icon" aria-hidden="true"><i class="fa-solid fa-users"></i></span>
         <span class="mi-text"><strong>Users</strong><small>Operators &amp; admins</small></span>
       </a>
+      <a class="menu-item" href="/backup">
+        <span class="mi-icon" aria-hidden="true"><i class="fa-solid fa-floppy-disk"></i></span>
+        <span class="mi-text"><strong>Backup &amp; restore</strong><small>Snapshots of the system</small></span>
+      </a>
       <a class="menu-item" href="/settings">
         <span class="mi-icon" aria-hidden="true"><i class="fa-solid fa-gear"></i></span>
         <span class="mi-text"><strong>Settings</strong><small>Backend pairing</small></span>
@@ -84,6 +88,10 @@
       <a class="menu-item" href="/settings">
         <span class="mi-icon" aria-hidden="true"><i class="fa-solid fa-gear"></i></span>
         <span class="mi-text"><strong>Settings</strong><small>Backend &amp; pairing</small></span>
+      </a>
+      <a class="menu-item" href="/backup">
+        <span class="mi-icon" aria-hidden="true"><i class="fa-solid fa-floppy-disk"></i></span>
+        <span class="mi-text"><strong>Backup &amp; restore</strong><small>Snapshots of the system</small></span>
       </a>
       {% endif %}
       <a class="menu-item danger" href="/logout">
@@ -135,6 +143,10 @@
     <a class="menu-item" href="/users" @click="mobileOpen = false">
       <span class="mi-icon" aria-hidden="true"><i class="fa-solid fa-users"></i></span>
       <span class="mi-text"><strong>Users</strong><small>Operators &amp; admins</small></span>
+    </a>
+    <a class="menu-item" href="/backup" @click="mobileOpen = false">
+      <span class="mi-icon" aria-hidden="true"><i class="fa-solid fa-floppy-disk"></i></span>
+      <span class="mi-text"><strong>Backup &amp; restore</strong><small>Snapshots of the system</small></span>
     </a>
     <a class="menu-item" href="/settings" @click="mobileOpen = false">
       <span class="mi-icon" aria-hidden="true"><i class="fa-solid fa-gear"></i></span>

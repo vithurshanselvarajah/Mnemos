@@ -1,0 +1,42 @@
+<div id="backup-settings">
+<form hx-post="/partials/backup/schedule"
+      hx-target="#backup-settings"
+      hx-swap="outerHTML"
+      style="margin-top: .5rem">
+  <div class="row" style="gap:.5rem; align-items:center; margin-top: .5rem">
+    <label class="row" style="gap:.5rem; align-items:center; margin:0">
+      <input type="checkbox" name="enabled" style="width:auto"
+             {% if settings and settings.enabled %}checked{% endif %} />
+      <span>Enable scheduled backups</span>
+    </label>
+  </div>
+  <div class="row" style="gap:.5rem; margin-top: .75rem">
+    <label style="margin:0; flex:1">Cadence
+      <select name="cadence">
+        <option value="daily" {% if settings and settings.cadence == 'daily' %}selected{% endif %}>Daily</option>
+        <option value="weekly" {% if settings and settings.cadence == 'weekly' %}selected{% endif %}>Weekly</option>
+      </select>
+    </label>
+    <label style="margin:0; flex:1">Hour (UTC)
+      <input type="number" name="hour_utc" min="0" max="23"
+             value="{{ settings.hour_utc if settings else 3 }}" />
+    </label>
+    <label style="margin:0; flex:1">Weekday (0=Mon, 6=Sun)
+      <input type="number" name="weekday_utc" min="0" max="6"
+             value="{{ settings.weekday_utc if settings else 0 }}" />
+    </label>
+    <label style="margin:0; flex:1">Retention count
+      <input type="number" name="retention_count" min="1" max="365"
+             value="{{ settings.retention_count if settings else 7 }}" />
+    </label>
+  </div>
+  <div class="row" style="margin-top: 1rem">
+    <button type="submit">Save schedule</button>
+  </div>
+</form>
+{% if settings and settings.enabled %}
+  <p class="hint" style="margin-top: .5rem">
+    Auto-backup is enabled. Next run will be triggered by the scheduler.
+  </p>
+{% endif %}
+</div>

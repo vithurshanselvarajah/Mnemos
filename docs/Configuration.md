@@ -34,6 +34,7 @@ All are prefixed `MNEMOS_`. Defaults are shown — only override if you have a r
 | --- | --- | --- |
 | `MNEMOS_DB_PATH` | `/data/backend.db` | SQLite file for persons, crops, API keys, master key, reindex state. |
 | `MNEMOS_CROPS_DIR` | `/data/crops` | Directory where cropped face JPEGs are stored. |
+| `MNEMOS_BACKUP_DIR` | `/data/backups` | Where generated `.tar.gz` backups are stored. Created on first use. |
 | `MNEMOS_VECTOR_DSN` | `postgresql://mnemos:mnemos@localhost:5432/mnemos_vectors` | pgvector DSN. The compose file injects the password from `MNEMOS_PG_PASSWORD`. |
 
 ### Inference
@@ -92,6 +93,23 @@ All are prefixed `MNEMOS_FE_`.
 | `MNEMOS_FE_LISTEN_HOST` | `0.0.0.0` | Listen address for the frontend's uvicorn. |
 | `MNEMOS_FE_LISTEN_PORT` | `8080` | Listen port for the frontend. |
 | `MNEMOS_FE_SECRET` | (required) | Session cookie signing key. **Must be at least 32 bytes.** |
+| `MNEMOS_FE_BACKUP_DIR` | `<MNEMOS_FE_DB_PATH parent>/backups/` | Where the frontend caches uploaded backup files. |
+
+---
+
+## Backup schedule (SQLite, not env)
+
+The auto-backup schedule lives in the `backup_settings` table in the frontend SQLite. Configure it from the UI at **Settings → Backup & restore → Auto-backup schedule**. Fields:
+
+| Field | Default | Notes |
+| --- | --- | --- |
+| `enabled` | `false` | Master switch. |
+| `cadence` | `daily` | `daily` or `weekly`. |
+| `hour_utc` | `3` | 0–23, when the scheduler runs. |
+| `weekday_utc` | `0` | 0=Mon … 6=Sun. Used only when `cadence=weekly`. |
+| `retention_count` | `7` | Keep the N most recent; older backups are deleted after each create. |
+
+There is no environment variable for these — they're runtime configuration that the user changes from the UI.
 
 ---
 

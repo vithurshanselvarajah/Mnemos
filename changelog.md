@@ -23,7 +23,7 @@ General
 - Addition of buffalo_m as a nice middle ground
 - Added Docs
 - Implemented Wiki Sync
-
+- Implemented Backup and Restore functionality
 
 Notes
 - Rockchip support has only been tested on RK3588. Performance between CPU buffalo_s and all rknn s,m,l models is identical. Better model can be run as a default at no performance cost which is a benefit.

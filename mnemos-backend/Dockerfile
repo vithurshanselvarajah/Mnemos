@@ -17,6 +17,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libglib2.0-0 \
         curl \
         ca-certificates \
+        sqlite3 \
+        postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /srv
@@ -40,7 +42,7 @@ COPY variants /srv/variants
 
 ENV MNEMOS_PROVIDER=${INSTALL_PROVIDER}
 
-RUN mkdir -p /data/crops /srv/models
+RUN mkdir -p /data/crops /data/backups /srv/models
 
 ARG RKNN_TOOLKIT_VERSION=v2.3.0
 ARG RKNN_RT_SHA256=73993ed4b440460825f21611731564503cc1d5a0c123746477da6cd574f34885

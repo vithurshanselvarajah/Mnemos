@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import (
     auth,
+    backup,
     crops,
     faces,
     health,
@@ -79,6 +80,15 @@ def create_app() -> FastAPI:
             {"name": "keys", "description": "Manage API keys (Full-Admin only)."},
             {"name": "system", "description": "Master key, pairing, and bootstrap (Full-Admin only)."},
             {"name": "crops", "description": "Fetch stored face crop JPEGs by crop UUID."},
+            {
+                "name": "backup",
+                "description": (
+                    "Create, list, download, delete, and restore full-system backups. "
+                    "A backup is a single .tar.gz that bundles the backend SQLite, "
+                    "crop JPEGs, and a pgvector SQL dump. Restore is destructive and "
+                    "runs as a background job that the UI polls."
+                ),
+            },
         ],
     )
 
@@ -102,6 +112,7 @@ def create_app() -> FastAPI:
     app.include_router(keys.router, prefix="/api/v1")
     app.include_router(system.router, prefix="/api/v1")
     app.include_router(crops.router, prefix="/api/v1")
+    app.include_router(backup.router, prefix="/api/v1")
     app.include_router(websocket.router)
 
     log.info(

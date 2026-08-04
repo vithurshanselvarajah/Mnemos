@@ -124,6 +124,13 @@ The response from `/healthz` includes a `version` field set from the `VERSION` f
 | `GET` | `/api/v1/system/master` | Full-Admin | [System](https://github.com/vithurshanselvarajah/Mnemos/wiki/API-System) |
 | `POST` | `/api/v1/system/master/rotate` | Full-Admin | [System](https://github.com/vithurshanselvarajah/Mnemos/wiki/API-System) |
 | `POST` | `/api/v1/system/pair` | master key | [System](https://github.com/vithurshanselvarajah/Mnemos/wiki/API-System) |
+| `GET` | `/api/v1/backup` | Full-Admin | [Backup & Restore](Backup-Restore.md) |
+| `POST` | `/api/v1/backup` | Full-Admin | [Backup & Restore](Backup-Restore.md) |
+| `GET` | `/api/v1/backup/{filename}/inspect` | Full-Admin | [Backup & Restore](Backup-Restore.md) |
+| `GET` | `/api/v1/backup/{filename}/download` | Full-Admin | [Backup & Restore](Backup-Restore.md) |
+| `DELETE` | `/api/v1/backup/{filename}` | Full-Admin | [Backup & Restore](Backup-Restore.md) |
+| `POST` | `/api/v1/backup/restore` | Full-Admin | [Backup & Restore](Backup-Restore.md) |
+| `GET` | `/api/v1/backup/restore/{job_id}` | Full-Admin | [Backup & Restore](Backup-Restore.md) |
 
 ---
 

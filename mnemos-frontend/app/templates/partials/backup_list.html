@@ -1,0 +1,57 @@
+<div id="backup-list">
+{% if backend_error %}
+  <div class="alert warn" style="margin-bottom: .75rem">
+    <strong>Backend warning:</strong> {{ backend_error }}
+  </div>
+{% endif %}
+{% if deleted %}
+  <div class="alert ok" style="margin-bottom: .75rem">
+    Deleted <code>{{ deleted }}</code>{% if local_deleted %} (local copy){% endif %}.
+  </div>
+{% endif %}
+{% if files %}
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th>Filename</th>
+      <th>Created</th>
+      <th>Size</th>
+      <th>SHA-256</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for f in files %}
+    <tr>
+      <td>
+        <code>{{ f.filename }}</code>
+        {% if f.local_only %}<span class="status info" style="margin-left:.5rem">uploaded only</span>{% endif %}
+      </td>
+      <td class="muted"><small>
+        {% if f.created_at is string %}{{ f.created_at[:16].replace('T', ' ') }}{% endif %}
+      </small></td>
+      <td>{% set sz = f.size_bytes %}{% if sz < 1024 %}{{ sz }} B{% elif sz < 1024*1024 %}{{ (sz/1024)|round(1) }} KB{% elif sz < 1024*1024*1024 %}{{ (sz/1024/1024)|round(1) }} MB{% else %}{{ (sz/1024/1024/1024)|round(2) }} GB{% endif %}</td>
+      <td class="muted"><small><code>{{ f.sha256[:12] }}…</code></small></td>
+      <td style="text-align:right; white-space:nowrap">
+        <a class="btn ghost sm" href="/partials/backup/download/{{ f.filename }}">Download</a>
+        <button class="btn ghost sm danger"
+                hx-delete="/partials/backup/{{ f.filename }}"
+                hx-target="#backup-list"
+                hx-swap="outerHTML"
+                hx-confirm="Delete backup {{ f.filename }}?">
+          Delete
+        </button>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+  <div class="empty-state">
+    <h3>No backups yet</h3>
+    <p>Create one above, or upload an existing backup file.</p>
+  </div>
+{% endif %}
+</div>

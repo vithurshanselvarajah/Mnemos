@@ -1,0 +1,30 @@
+<div id="restore-status">
+{% if job.status == 'done' %}
+  <div class="alert ok">
+    <strong>Restore complete.</strong>
+    <code>{{ filename }}</code> has been applied. The model is reloading — give it a few seconds, then refresh the page.
+    <p style="margin-top:.5rem">
+      <a class="btn ghost sm" href="/dashboard">Back to dashboard</a>
+    </p>
+  </div>
+{% elif job.status == 'error' %}
+  <div class="alert error">
+    <strong>Restore failed.</strong>
+    <pre style="white-space:pre-wrap; margin-top:.5rem">{{ job.log | join('\n') }}
+{{ job.error or '' }}</pre>
+  </div>
+{% else %}
+  <div class="card" hx-get="/partials/backup/restore-status/{{ job.id }}"
+       hx-trigger="load delay:1s, every 2s"
+       hx-swap="outerHTML"
+       hx-target="#restore-status">
+    <div class="row" style="gap:.5rem; align-items:center">
+      <span class="htmx-indicator" style="display: inline-flex"></span>
+      <strong>Restoring {{ filename }}…</strong>
+    </div>
+    {% if job.log %}
+    <pre style="white-space:pre-wrap; margin-top:.5rem; max-height: 200px; overflow:auto">{{ job.log | join('\n') }}</pre>
+    {% endif %}
+  </div>
+{% endif %}
+</div>

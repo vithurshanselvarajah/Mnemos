@@ -157,12 +157,13 @@ async def partial_backup_upload(request: Request):
     if file is None or not hasattr(file, "filename"):
         return HTMLResponse("<div class='error'>file is required</div>", status_code=400)
     filename = (file.filename or "").strip()
-    if not backup_local.is_valid_filename(filename):
+    try:
+        dest = backup_local.safe_path(filename)
+    except ValueError:
         return HTMLResponse(
             "<div class='error'>filename must match mnemos-backup-YYYYMMDD-HHMMSS.tar.gz</div>",
             status_code=400,
         )
-    dest = backup_local.backup_dir() / filename
     content = await file.read()
     if not content:
         return HTMLResponse("<div class='error'>empty file</div>", status_code=400)
@@ -261,14 +262,15 @@ def partial_backup_restore_status(job_id: str, request: Request):
 @router.get("/download/{filename}")
 def partial_backup_download(filename: str, request: Request):
     require_admin(request)
-    if not backup_local.is_valid_filename(filename):
-        raise HTTPException(status_code=400, detail="bad filename")
-    local_path = backup_local.backup_dir() / filename
+    try:
+        local_path = backup_local.safe_path(filename)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     if local_path.exists():
         return FileResponse(
             path=str(local_path),
             media_type="application/gzip",
-            filename=filename,
+            filename=local_path.name,
         )
     try:
         r = get_sync(f"/api/v1/backup/{filename}/download", timeout=None)

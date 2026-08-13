@@ -119,20 +119,28 @@ def is_valid_filename(name: str) -> bool:
     return bool(FILENAME_RE.match(name))
 
 
-def delete_backup(name: str) -> None:
+def safe_path(name: str) -> Path:
     if not is_valid_filename(name):
         raise ValueError(f"invalid backup filename: {name!r}")
-    p = backup_dir() / name
+    base = backup_dir().resolve()
+    candidate = (base / name).resolve()
+    try:
+        candidate.relative_to(base)
+    except ValueError as e:
+        raise ValueError(f"backup path escapes backup dir: {name!r}") from e
+    return candidate
+
+
+def delete_backup(name: str) -> None:
+    p = safe_path(name)
     if not p.exists():
-        raise FileNotFoundError(name)
+        raise FileNotFoundError(p.name)
     p.unlink()
-    log.info("backup deleted: %s", name)
+    log.info("backup deleted: %s", p.name)
 
 
 def reserve_path(name: str) -> Path:
-    if not is_valid_filename(name):
-        raise ValueError(f"invalid backup filename: {name!r}")
-    return backup_dir() / name
+    return safe_path(name)
 
 
 def save_uploaded_backup(name: str, source: Path) -> Path:

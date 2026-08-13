@@ -109,6 +109,17 @@ def _safe_filename(name: str) -> str:
     return name
 
 
+def _safe_path(filename: str) -> Path:
+    name = _safe_filename(filename)
+    base = backup_dir().resolve()
+    candidate = (base / name).resolve()
+    try:
+        candidate.relative_to(base)
+    except ValueError as e:
+        raise ValueError(f"backup path escapes backup dir: {filename!r}") from e
+    return candidate
+
+
 def list_backups() -> list[BackupMetadata]:
     base = backup_dir()
     out: list[BackupMetadata] = []
@@ -292,8 +303,8 @@ def read_manifest(tarball: Path) -> tuple[dict, dict]:
 
 
 def inspect_backup(filename: str) -> dict:
-    name = _safe_filename(filename)
-    path = backup_dir() / name
+    path = _safe_path(filename)
+    name = path.name
     if not path.exists():
         raise FileNotFoundError(name)
     manifest, _members = read_manifest(path)
@@ -315,12 +326,11 @@ def extract_member(tarball: Path, member_name: str) -> bytes:
 
 
 def delete_backup(filename: str) -> None:
-    name = _safe_filename(filename)
-    path = backup_dir() / name
+    path = _safe_path(filename)
     if not path.exists():
-        raise FileNotFoundError(name)
+        raise FileNotFoundError(path.name)
     path.unlink()
-    log.info("backup deleted: %s", name)
+    log.info("backup deleted: %s", path.name)
 
 
 def _pg_restore(pg_sql_text: str) -> None:

@@ -141,6 +141,28 @@ def test_safe_filename_rejects_path_traversal(backend_imports):
     )
 
 
+def test_safe_path_rejects_escape_and_returns_resolved(
+    backend_imports, tmp_path, monkeypatch
+):
+    from app import backup as backup_mod
+
+    monkeypatch.setenv("MNEMOS_BACKUP_DIR", str(tmp_path / "backups"))
+    base = backup_mod.backup_dir()
+    base.mkdir(parents=True, exist_ok=True)
+
+    # Well-formed name -> resolved path lives under the backup dir.
+    good = base / "mnemos-backup-20260101-000000.tar.gz"
+    good.write_bytes(b"")
+    resolved = backup_mod._safe_path("mnemos-backup-20260101-000000.tar.gz")
+    assert resolved == good.resolve()
+    assert resolved.is_file()
+
+    # Anything that doesn't match the strict filename regex is rejected.
+    for bad in ("../etc/passwd", "not-a-backup.tar.gz", "", "subdir/x.tar.gz"):
+        with pytest.raises(ValueError):
+            backup_mod._safe_path(bad)
+
+
 def test_backup_dir_creates_directory(backend_imports, tmp_path, monkeypatch):
     from app import backup as backup_mod
 

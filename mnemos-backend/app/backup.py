@@ -109,15 +109,30 @@ def _safe_filename(name: str) -> str:
     return name
 
 
-def _safe_path(filename: str) -> Path:
-    name = _safe_filename(filename)
-    base = backup_dir().resolve()
-    candidate = (base / name).resolve()
+def _find_backup(name: str) -> Path | None:
+    if not FILENAME_RE.match(name):
+        return None
+    base = backup_dir()
     try:
-        candidate.relative_to(base)
-    except ValueError as e:
-        raise ValueError(f"backup path escapes backup dir: {filename!r}") from e
-    return candidate
+        for entry in base.iterdir():
+            if entry.name == name and entry.is_file():
+                return entry
+    except (FileNotFoundError, OSError):
+        return None
+    return None
+
+
+def _reserved_upload_path(name: str) -> Path:
+    if not FILENAME_RE.match(name):
+        raise ValueError(f"invalid backup filename: {name!r}")
+    base_real = os.path.realpath(str(backup_dir()))
+    candidate_real = os.path.realpath(os.path.join(base_real, name))
+    if (
+        candidate_real != base_real
+        and not candidate_real.startswith(base_real + os.sep)
+    ):
+        raise ValueError(f"backup path escapes backup dir: {name!r}")
+    return Path(candidate_real)
 
 
 def list_backups() -> list[BackupMetadata]:
@@ -303,9 +318,9 @@ def read_manifest(tarball: Path) -> tuple[dict, dict]:
 
 
 def inspect_backup(filename: str) -> dict:
-    path = _safe_path(filename)
-    name = path.name
-    if not path.exists():
+    name = _safe_filename(filename)
+    path = _find_backup(name)
+    if path is None:
         raise FileNotFoundError(name)
     manifest, _members = read_manifest(path)
     stat = path.stat()
@@ -326,11 +341,12 @@ def extract_member(tarball: Path, member_name: str) -> bytes:
 
 
 def delete_backup(filename: str) -> None:
-    path = _safe_path(filename)
-    if not path.exists():
-        raise FileNotFoundError(path.name)
+    name = _safe_filename(filename)
+    path = _find_backup(name)
+    if path is None:
+        raise FileNotFoundError(name)
     path.unlink()
-    log.info("backup deleted: %s", path.name)
+    log.info("backup deleted: %s", name)
 
 
 def _pg_restore(pg_sql_text: str) -> None:

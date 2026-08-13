@@ -75,10 +75,11 @@ def delete_backup(filename: str):
 @router.get("/{filename}/download", dependencies=[Depends(require_full_admin)])
 def download_backup(filename: str, request: Request):
     try:
-        path = backup_mod._safe_path(filename)
+        backup_mod._safe_filename(filename)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    if not path.exists():
+    path = backup_mod._find_backup(filename)
+    if path is None:
         raise HTTPException(status_code=404, detail="backup not found")
     size = path.stat().st_size
 
@@ -91,7 +92,7 @@ def download_backup(filename: str, request: Request):
                 yield chunk
 
     headers = {
-        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Content-Disposition": f'attachment; filename="{path.name}"',
         "Content-Length": str(size),
         "X-Backup-SHA256": backup_mod._sha256_file(path),
     }

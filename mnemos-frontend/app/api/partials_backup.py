@@ -76,8 +76,9 @@ def _all_files() -> list[dict]:
                 seen.add(it["filename"])
         else:
             backend_error = f"backend returned {r.status_code}"
-    except Exception as e:
-        backend_error = f"backend unreachable: {e}"
+    except Exception:
+        log.exception("backup list fetch failed")
+        backend_error = "backend unreachable"
     for local in backup_local.list_backups():
         if local.filename in seen:
             continue
@@ -108,8 +109,12 @@ async def partial_backup_create(request: Request):
     require_admin(request)
     try:
         r = backup_create()
-    except Exception as e:
-        return HTMLResponse(f"<div class='error'>{e}</div>", status_code=502)
+    except Exception:
+        log.exception("backup create failed")
+        return HTMLResponse(
+            "<div class='error'>Backup create failed. See server logs.</div>",
+            status_code=502,
+        )
     if r.status_code >= 400:
         return HTMLResponse(
             f"<div class='error'>Create failed ({r.status_code}): {r.text}</div>",
@@ -130,8 +135,9 @@ def partial_backup_delete(filename: str, request: Request):
             pass
         elif r.status_code >= 400:
             backend_error = f"backend {r.status_code}: {r.text}"
-    except Exception as e:
-        backend_error = f"backend error: {e}"
+    except Exception:
+        log.exception("backup delete request to backend failed for %s", filename)
+        backend_error = "backend error"
     local_deleted = False
     try:
         backup_local.delete_backup(filename)
@@ -158,7 +164,7 @@ async def partial_backup_upload(request: Request):
         return HTMLResponse("<div class='error'>file is required</div>", status_code=400)
     filename = (file.filename or "").strip()
     try:
-        dest = backup_local.safe_path(filename)
+        dest = backup_local.reserve_upload_path(filename)
     except ValueError:
         return HTMLResponse(
             "<div class='error'>filename must match mnemos-backup-YYYYMMDD-HHMMSS.tar.gz</div>",
@@ -196,8 +202,12 @@ async def partial_backup_restore(request: Request):
         )
     try:
         r = backup_restore(filename)
-    except Exception as e:
-        return HTMLResponse(f"<div class='error'>backend unreachable: {e}</div>", status_code=502)
+    except Exception:
+        log.exception("backup restore request failed for %s", filename)
+        return HTMLResponse(
+            "<div class='error'>Backend unreachable. See server logs.</div>",
+            status_code=502,
+        )
     if r.status_code == 409:
         return HTMLResponse("<div class='error'>A restore is already in progress.</div>", status_code=409)
     if r.status_code >= 400:
@@ -230,8 +240,12 @@ def partial_backup_restore_status(job_id: str, request: Request):
     require_admin(request)
     try:
         r = backup_restore_status(job_id)
-    except Exception as e:
-        return HTMLResponse(f"<div class='error'>{e}</div>", status_code=502)
+    except Exception:
+        log.exception("backup restore-status fetch failed for %s", job_id)
+        return HTMLResponse(
+            "<div class='error'>Could not reach the backend. See server logs.</div>",
+            status_code=502,
+        )
     if r.status_code == 404:
         try:
             with session_scope() as s:
@@ -262,11 +276,10 @@ def partial_backup_restore_status(job_id: str, request: Request):
 @router.get("/download/{filename}")
 def partial_backup_download(filename: str, request: Request):
     require_admin(request)
-    try:
-        local_path = backup_local.safe_path(filename)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    if local_path.exists():
+    if not backup_local.is_valid_filename(filename):
+        raise HTTPException(status_code=400, detail="bad filename")
+    local_path = backup_local.find_local_backup(filename)
+    if local_path is not None:
         return FileResponse(
             path=str(local_path),
             media_type="application/gzip",
@@ -274,8 +287,9 @@ def partial_backup_download(filename: str, request: Request):
         )
     try:
         r = get_sync(f"/api/v1/backup/{filename}/download", timeout=None)
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"backend unreachable: {e}")
+    except Exception:
+        log.exception("backup download proxy failed for %s", filename)
+        raise HTTPException(status_code=502, detail="backend unreachable")
     if r.status_code == 404:
         raise HTTPException(status_code=404, detail="backup not found")
     if r.status_code >= 400:

@@ -141,7 +141,7 @@ def test_safe_filename_rejects_path_traversal(backend_imports):
     )
 
 
-def test_safe_path_rejects_escape_and_returns_resolved(
+def test_find_backup_returns_existing_path_or_none(
     backend_imports, tmp_path, monkeypatch
 ):
     from app import backup as backup_mod
@@ -150,17 +150,44 @@ def test_safe_path_rejects_escape_and_returns_resolved(
     base = backup_mod.backup_dir()
     base.mkdir(parents=True, exist_ok=True)
 
-    # Well-formed name -> resolved path lives under the backup dir.
+    # No entry yet -> None
+    assert (
+        backup_mod._find_backup("mnemos-backup-20260101-000000.tar.gz") is None
+    )
+
+    # Existing entry -> Path that is exactly the iterdir() entry.
     good = base / "mnemos-backup-20260101-000000.tar.gz"
     good.write_bytes(b"")
-    resolved = backup_mod._safe_path("mnemos-backup-20260101-000000.tar.gz")
-    assert resolved == good.resolve()
-    assert resolved.is_file()
+    found = backup_mod._find_backup("mnemos-backup-20260101-000000.tar.gz")
+    assert found is not None
+    assert found == good
+    assert found.is_file()
+
+    # Invalid names are short-circuited to None without touching the disk.
+    for bad in ("../etc/passwd", "not-a-backup.tar.gz", "", "subdir/x.tar.gz"):
+        assert backup_mod._find_backup(bad) is None
+
+
+def test_reserved_upload_path_rejects_escape(
+    backend_imports, tmp_path, monkeypatch
+):
+    from app import backup as backup_mod
+
+    monkeypatch.setenv("MNEMOS_BACKUP_DIR", str(tmp_path / "backups"))
+    base = backup_mod.backup_dir()
+    base.mkdir(parents=True, exist_ok=True)
+
+    # Well-formed name -> Path inside the backup dir.
+    dest = backup_mod._reserved_upload_path(
+        "mnemos-backup-20260101-000000.tar.gz"
+    )
+    assert dest == (base / "mnemos-backup-20260101-000000.tar.gz").resolve()
+    assert str(dest).startswith(str(base.resolve()))
 
     # Anything that doesn't match the strict filename regex is rejected.
     for bad in ("../etc/passwd", "not-a-backup.tar.gz", "", "subdir/x.tar.gz"):
         with pytest.raises(ValueError):
-            backup_mod._safe_path(bad)
+            backup_mod._reserved_upload_path(bad)
 
 
 def test_backup_dir_creates_directory(backend_imports, tmp_path, monkeypatch):

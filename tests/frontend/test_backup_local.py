@@ -126,6 +126,38 @@ def test_is_valid_filename(fe_with_db):
     assert not backup_local.is_valid_filename("")
 
 
+def test_find_local_backup_returns_existing_path_or_none(fe_with_db):
+    from app.services import backup_local
+
+    _tmp, _db, backup_dir = fe_with_db
+    name = "mnemos-backup-20260101-000000.tar.gz"
+    assert backup_local.find_local_backup(name) is None
+
+    target = backup_dir / name
+    target.write_bytes(b"")
+    found = backup_local.find_local_backup(name)
+    assert found is not None
+    assert found == target
+    assert found.is_file()
+
+    for bad in ("../etc/passwd", "not-a-backup.tar.gz", "", "subdir/x.tar.gz"):
+        assert backup_local.find_local_backup(bad) is None
+
+
+def test_reserve_upload_path_rejects_escape(fe_with_db):
+    from app.services import backup_local
+
+    _tmp, _db, backup_dir = fe_with_db
+    name = "mnemos-backup-20260101-000000.tar.gz"
+    dest = backup_local.reserve_upload_path(name)
+    assert dest == (backup_dir / name).resolve()
+    assert str(dest).startswith(str(backup_dir.resolve()))
+
+    for bad in ("../etc/passwd", "not-a-backup.tar.gz", "", "subdir/x.tar.gz"):
+        with pytest.raises(ValueError):
+            backup_local.reserve_upload_path(bad)
+
+
 def test_peek_archive_returns_members(fe_with_db):
 
     from app.services import backup_local

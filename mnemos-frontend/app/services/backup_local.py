@@ -119,28 +119,44 @@ def is_valid_filename(name: str) -> bool:
     return bool(FILENAME_RE.match(name))
 
 
-def safe_path(name: str) -> Path:
+def find_local_backup(name: str) -> Path | None:
+    if not is_valid_filename(name):
+        return None
+    base = backup_dir()
+    try:
+        for entry in base.iterdir():
+            if entry.name == name and entry.is_file():
+                return entry
+    except (FileNotFoundError, OSError):
+        return None
+    return None
+
+
+def reserve_upload_path(name: str) -> Path:
     if not is_valid_filename(name):
         raise ValueError(f"invalid backup filename: {name!r}")
-    base = backup_dir().resolve()
-    candidate = (base / name).resolve()
-    try:
-        candidate.relative_to(base)
-    except ValueError as e:
-        raise ValueError(f"backup path escapes backup dir: {name!r}") from e
-    return candidate
+    base_real = os.path.realpath(str(backup_dir()))
+    candidate_real = os.path.realpath(os.path.join(base_real, name))
+    if (
+        candidate_real != base_real
+        and not candidate_real.startswith(base_real + os.sep)
+    ):
+        raise ValueError(f"backup path escapes backup dir: {name!r}")
+    return Path(candidate_real)
 
 
 def delete_backup(name: str) -> None:
-    p = safe_path(name)
-    if not p.exists():
-        raise FileNotFoundError(p.name)
-    p.unlink()
-    log.info("backup deleted: %s", p.name)
+    if not is_valid_filename(name):
+        raise ValueError(f"invalid backup filename: {name!r}")
+    path = find_local_backup(name)
+    if path is None:
+        raise FileNotFoundError(name)
+    path.unlink()
+    log.info("backup deleted: %s", name)
 
 
 def reserve_path(name: str) -> Path:
-    return safe_path(name)
+    return reserve_upload_path(name)
 
 
 def save_uploaded_backup(name: str, source: Path) -> Path:

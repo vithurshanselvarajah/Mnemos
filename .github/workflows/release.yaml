@@ -46,12 +46,14 @@ jobs:
     name: Prepare (${{ matrix.service }})
     needs: matrix-setup
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     strategy:
       matrix:
         service: ${{ fromJSON(needs.matrix-setup.outputs.targets) }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -59,6 +61,9 @@ jobs:
         id: version
         run: |
           set -euo pipefail
+          # The version is the single source of truth — read it from
+          # the service's own _version.py. Nothing else (not the git
+          # tag, not changelog.md) is consulted.
           version="$(sed -n 's/^__version__[[:space:]]*=[[:space:]]*["'"'"']\([^"'"'"']*\)["'"'"'].*/\1/p' \
             mnemos-${{ matrix.service }}/app/_version.py | head -n1)"
           if [[ -z "$version" ]]; then
@@ -67,6 +72,7 @@ jobs:
           fi
           tag="mnemos-${{ matrix.service }}-v${version}"
           echo "Read ${{ matrix.service }} version: $version (tag: $tag)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
   test:
     name: Test release candidate
@@ -95,7 +101,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Read version for target
         id: version
@@ -107,23 +113,23 @@ jobs:
 
       - name: Extract metadata for image
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ github.repository_owner }}/mnemos-${{ matrix.service }}
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build and push by digest
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./mnemos-${{ matrix.service }}
           file: ./mnemos-${{ matrix.service }}/Dockerfile
@@ -140,7 +146,7 @@ jobs:
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: Upload digest artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: digests-mnemos-${{ matrix.service }}-${{ matrix.platform.arch }}
           path: /tmp/digests/*
@@ -159,7 +165,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -178,25 +184,25 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Download digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: digests-mnemos-${{ matrix.service }}-*
           path: /tmp/digests
           merge-multiple: true
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Extract metadata for image
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ github.repository_owner }}/mnemos-${{ matrix.service }}
           tags: |
@@ -229,36 +235,106 @@ jobs:
         run: |
           docker buildx imagetools inspect ghcr.io/${{ github.repository_owner }}/mnemos-${{ matrix.service }}:${{ steps.version.outputs.version }}
 
-      - name: Collect commits for changelog
-        id: commits
+      - name: Read changelog section for this service
+        id: changelog_section
         run: |
           set -euo pipefail
-          previous_tag="$(git describe --tags --match "mnemos-${{ matrix.service }}-*" --abbrev=0 2>/devnull || true)"
-          if [[ -n "$previous_tag" ]]; then
-            range="${previous_tag}..HEAD"
-          else
-            range="HEAD"
-          fi
-          
-          # Write directly to a file to prevent shell expansion issues
-          git log "$range" --pretty=format:"- %s (%h)%n%b" --name-only --no-merges -- "mnemos-${{ matrix.service }}" > /tmp/commits.txt
+          # Source-of-truth split for release content:
+          #   - VERSION comes from mnemos-<service>/app/_version.py
+          #     (read earlier by the `prepare` job and re-read here
+          #     only for the docker image tag).
+          #   - NOTES come from changelog.md, which is curated by
+          #     the maintainer. Its top-level shape is plain H1-style
+          #     text (no `##` prefix), with the version line
+          #     intentionally absent (the version is in _version.py,
+          #     not the changelog):
+          #
+          #       Mnemos-Frontend
+          #       - bullet
+          #       ...
+          #
+          #       Mnemos-Backend
+          #       - bullet
+          #       ...
+          #
+          #       General
+          #       - bullet (applies to every service)
+          #
+          #       Notes
+          #       - bullet (caveats / context)
+          #
+          # We extract the matching service section, then append the
+          # General + Notes sections. If the service has no dedicated
+          # section, we fall back to General + Notes alone.
+          service="${{ matrix.service }}"
+          case "$service" in
+            frontend) heading="Mnemos-Frontend" ;;
+            backend)  heading="Mnemos-Backend"  ;;
+            *)        heading=""                ;;
+          esac
 
-      - name: Generate changelog with GitHub AI
+          extract_section() {
+            # Print everything between a top-level service/General/Notes
+            # header and the next one. The version line that used to
+            # sit under each service header is no longer expected.
+            local h="$1"
+            awk -v h="$h" '
+              $0 == h {f=1; next}
+              /^Mnemos-(Frontend|Backend)$/ || /^General$/ || /^Notes$/ {f=0}
+              f {print}
+            ' changelog.md | sed '/^$/d' | head -n 200
+          }
+
+          extracted=""
+          if [[ -s changelog.md ]]; then
+            if [[ -n "$heading" ]]; then
+              extracted="$(extract_section "$heading")"
+            fi
+            general="$(extract_section "General")"
+            notes="$(extract_section "Notes")"
+            extras=""
+            [[ -n "$general" ]] && extras="${extras}${general}"$'\n\n'
+            [[ -n "$notes"   ]] && extras="${extras}${notes}"$'\n\n'
+            if [[ -n "$extracted" ]]; then
+              extracted="${extracted}"$'\n\n'"${extras}"
+            elif [[ -n "$extras" ]]; then
+              # Service has no dedicated section: use General + Notes only.
+              extracted="${extras}"
+            else
+              # Nothing structured — pass the whole file through.
+              extracted="$(cat changelog.md)"
+            fi
+          fi
+
+          printf '%s\n' "$extracted" > /tmp/changelog-section.md
+          echo "Changelog section bytes: $(wc -c < /tmp/changelog-section.md)"
+
+      - name: AI-parse changelog (optional)
         id: ai_changelog
         continue-on-error: true
+        # Best-effort cleanup only. The AI is asked to lightly structure
+        # the human-written section (fix typos, dedupe bullets, group
+        # by category). It MUST NOT invent changes. If the inference
+        # call fails (no token, model unavailable, timeout), the next
+        # step falls back to raw passthrough of /tmp/changelog-section.md.
         uses: actions/ai-inference@v2
         with:
           model: openai/gpt-4o
           max-tokens: 700
           system-prompt: >-
-            You write concise GitHub release notes for Mnemos (a self-hosted
-            facial recognition stack). Use Markdown bullets. Do not invent
-            changes. Focus only on user-visible changes.
+            You clean up a human-written release-notes section for the
+            Mnemos project (a self-hosted facial recognition stack).
+            Do NOT invent changes, do NOT add new bullets, do NOT
+            speculate. Only: fix obvious typos, deduplicate identical
+            bullets, group closely related bullets under a short
+            category heading (e.g. "### Backend", "### Frontend",
+            "### Bug fixes"). Preserve every original bullet. Return
+            plain Markdown only — no preamble, no closing remarks.
           prompt: |
-            Create release notes for mnemos-${{ matrix.service }}.
+            Service: ${{ matrix.service }}
 
-            Commits:
-            $(cat /tmp/commits.txt)
+            Changelog section:
+            $(cat /tmp/changelog-section.md)
 
       - name: Write release notes
         env:
@@ -269,10 +345,8 @@ jobs:
             echo "<!-- MNEMOS-RELEASE-CONTENT-START -->"
             if [[ -n "${AI_NOTES_FILE:-}" && -s "$AI_NOTES_FILE" ]]; then
               cat "$AI_NOTES_FILE"
-            elif [[ -s /tmp/commits.txt ]]; then
-              echo "## Changes"
-              echo
-              cat /tmp/commits.txt
+            elif [[ -s /tmp/changelog-section.md ]]; then
+              cat /tmp/changelog-section.md
             else
               echo "## Changes"
               echo
@@ -321,7 +395,7 @@ jobs:
           cat service-info.json
 
       - name: Upload per-service release bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bundle-mnemos-${{ matrix.service }}-${{ steps.version.outputs.version }}
           path: |
@@ -339,12 +413,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Download every per-service bundle
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: bundle-mnemos-*
           path: /tmp/bundles

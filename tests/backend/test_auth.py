@@ -115,15 +115,26 @@ def test_revoked_api_key_rejected(backend_app):
         json={"master_key": backend_app["master_key"], "name": "Test Node"},
     )
     api_key = r.json()["raw_key"]
-    key_id = r.json()["api_key_id"]
+
+    # Mint a second, non-pairing key and revoke *that* one. Pairing keys
+    # are guarded by /api/v1/keys/{id}/revoke and cannot be revoked
+    # from the user-facing API.
+    r = client.post(
+        "/api/v1/keys",
+        json={"name": "throwaway", "permission_level": "Identify-Only"},
+        headers={"X-API-Key": api_key},
+    )
+    assert r.status_code == 200, r.text
+    second_key = r.json()["raw_key"]
+    second_key_id = r.json()["api_key"]["id"]
 
     r = client.post(
-        f"/api/v1/keys/{key_id}/revoke",
+        f"/api/v1/keys/{second_key_id}/revoke",
         headers={"X-API-Key": api_key},
     )
     assert r.status_code == 200
 
-    r = client.get("/api/v1/persons", headers={"X-API-Key": api_key})
+    r = client.get("/api/v1/persons", headers={"X-API-Key": second_key})
     assert r.status_code == 401
 
 

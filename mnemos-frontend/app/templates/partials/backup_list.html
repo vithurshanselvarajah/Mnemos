@@ -1,0 +1,91 @@
+<div id="backup-list">
+{% if backend_error %}
+  <div class="alert warn" style="margin-bottom: .75rem">
+    <strong>Backend warning:</strong> {{ backend_error }}
+  </div>
+{% endif %}
+{% if deleted %}
+  <div class="alert ok" style="margin-bottom: .75rem">
+    Deleted <code>{{ deleted }}</code>{% if local_deleted %} (local copy){% endif %}.
+  </div>
+{% endif %}
+{% if files %}
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th>Filename</th>
+      <th>Created</th>
+      <th>Size</th>
+      <th>SHA-256</th>
+      <th></th>
+    </tr>
+  </thead>
+  {% for f in files %}
+  {% set status_id = 'restore-status-' ~ loop.index %}
+  <tbody x-data="{ restoring: false }">
+    <tr>
+      <td>
+        <code>{{ f.filename }}</code>
+        {% if f.local_only %}<span class="status info" style="margin-left:.5rem">uploaded only</span>{% endif %}
+      </td>
+      <td class="muted"><small>
+        {% if f.created_at is string %}{{ f.created_at[:16].replace('T', ' ') }}{% endif %}
+      </small></td>
+      <td>{% set sz = f.size_bytes %}{% if sz < 1024 %}{{ sz }} B{% elif sz < 1024*1024 %}{{ (sz/1024)|round(1) }} KB{% elif sz < 1024*1024*1024 %}{{ (sz/1024/1024)|round(1) }} MB{% else %}{{ (sz/1024/1024/1024)|round(2) }} GB{% endif %}</td>
+      <td class="muted"><small><code>{{ f.sha256[:12] }}…</code></small></td>
+      <td style="text-align:right; white-space:nowrap">
+        <a class="btn ghost sm" href="/partials/backup/download/{{ f.filename }}">Download</a>
+        <button class="btn ghost sm"
+                type="button"
+                x-show="!restoring"
+                @click="restoring = true">Restore</button>
+        <button class="btn ghost sm danger"
+                x-show="!restoring"
+                hx-delete="/partials/backup/{{ f.filename }}"
+                hx-target="#backup-list"
+                hx-swap="outerHTML"
+                hx-confirm="Delete backup {{ f.filename }}?">
+          Delete
+        </button>
+        <button class="btn ghost sm"
+                type="button"
+                x-show="restoring"
+                @click="restoring = false"
+                x-cloak>Cancel</button>
+      </td>
+    </tr>
+    <tr x-show="restoring" x-cloak>
+      <td colspan="5" style="background: var(--bg-sunken)">
+        <form hx-post="/partials/backup/restore"
+              hx-target="#{{ status_id }}"
+              hx-swap="outerHTML"
+              style="display:flex; gap:.75rem; align-items:center; flex-wrap:wrap">
+          <input type="hidden" name="filename" value="{{ f.filename }}" />
+          <input type="hidden" name="target_id" value="{{ status_id }}" />
+          <label class="row" style="gap:.5rem; align-items:center; margin:0; flex:1">
+            <input type="checkbox" name="confirm" required style="width:auto" />
+            <span>
+              Restore <code>{{ f.filename }}</code> — this overwrites the live backend SQLite,
+              crops, and pgvector database. If the backup was taken from a different
+              backend (different master key) the frontend will need to be re-paired
+              (<code>/onboarding/repair</code>) afterwards; if it's the same
+              backend, no re-pair is needed.
+            </span>
+          </label>
+          <button type="submit" class="danger">Confirm restore</button>
+        </form>
+        <div id="{{ status_id }}" style="margin-top: .75rem"></div>
+      </td>
+    </tr>
+  </tbody>
+  {% endfor %}
+</table>
+</div>
+{% else %}
+  <div class="empty-state">
+    <h3>No backups yet</h3>
+    <p>Create one above, or upload an existing backup file.</p>
+  </div>
+{% endif %}
+</div>

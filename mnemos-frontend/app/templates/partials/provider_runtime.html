@@ -1,0 +1,28 @@
+{% set provider = info.get('provider') or 'unknown' %}
+{% set soc = info.get('rockchip_soc') %}
+<div class="provider-runtime">
+  <div class="provider-runtime__row">
+    <span class="muted">Provider</span>
+    <code class="provider-runtime__pill provider-runtime__pill--{{ provider }}">{{ provider }}</code>
+  </div>
+  {% if provider == 'rockchip' %}
+  <div class="provider-runtime__row">
+    <span class="muted">Rockchip SoC</span>
+    <code class="provider-runtime__pill">{{ soc or 'unknown' }}</code>
+  </div>
+  {% endif %}
+  <div class="provider-runtime__row">
+    <span class="muted">Backend status</span>
+    {% if info.get('status') == 'ok' %}
+      <span class="status ok">healthy</span>
+    {% else %}
+      <span class="status error">degraded</span>
+    {% endif %}
+  </div>
+  {% if provider == 'rockchip' and soc and not info.get('model_loaded') %}
+  <p class="provider-runtime__note">
+    The container will not serve identification requests until the active model
+    is loaded for the detected SoC (<code>{{ soc }}</code>).
+  </p>
+  {% endif %}
+</div>

@@ -1,5 +1,6 @@
 <div id="users-list">
 {% if users %}
+<div class="table-wrap">
 <table>
   <thead>
     <tr><th>Username</th><th>Role</th><th>Created</th><th></th></tr>
@@ -9,7 +10,7 @@
     <tr>
       <td><strong>{{ u.username }}</strong></td>
       <td><span class="status {{ 'ok' if u.role == 'Admin' else 'info' }}">{{ u.role }}</span></td>
-      <td class="muted"><small>{{ u.created_at }}</small></td>
+      <td class="muted"><small>{% if u.created_at is string %}{{ u.created_at[:16].replace('T', ' ') }}{% elif u.created_at %}{{ u.created_at.strftime('%Y-%m-%d %H:%M') }}{% endif %}</small></td>
       <td style="text-align:right">
         <button class="btn ghost sm" hx-delete="/partials/users/{{ u.id }}" hx-target="#users-list" hx-swap="outerHTML" hx-confirm="Delete user {{ u.username }}?">Delete</button>
       </td>
@@ -17,6 +18,7 @@
     {% endfor %}
   </tbody>
 </table>
+</div>
 {% else %}
   <div class="empty-state">
     <h3>No users yet</h3>

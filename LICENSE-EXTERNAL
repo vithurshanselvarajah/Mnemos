@@ -1,0 +1,120 @@
+Mnemos — Third-Party Notices
+================================================================================
+
+Mnemos itself is licensed under the GNU Affero General Public License v3
+(see LICENSE). The components below are governed by their own licenses;
+nothing in this file grants additional rights beyond what those licenses
+permit.
+
+If you redistribute Mnemos (for example, by publishing a derived image),
+the upstream licenses of these components apply. Apache-2.0, MIT, and
+BSD-3-Clause are permissive and compatible with AGPLv3; you may
+republish them alongside Mnemos as long as their respective notices are
+preserved.
+
+
+--------------------------------------------------------------------------------
+insightface (Python package)
+--------------------------------------------------------------------------------
+Version:  1.0.1
+License:  Apache License 2.0
+Source:   https://github.com/deepinsight/insightface
+
+Used by:  mnemos-backend, all three providers (cpu / nvidia / rockchip).
+          High-level face detection, alignment, and embedding API.
+
+A copy of the Apache License 2.0 is available at:
+    https://www.apache.org/licenses/LICENSE-2.0
+
+
+--------------------------------------------------------------------------------
+onnxruntime / onnxruntime-gpu
+--------------------------------------------------------------------------------
+Version:  1.27.0  (onnxruntime for cpu, onnxruntime-gpu for nvidia)
+License:  MIT
+Source:   https://github.com/microsoft/onnxruntime
+
+Used by:  mnemos-backend, cpu and nvidia providers. Runs the ONNX buffalo
+          models for detection and embedding inference.
+
+Copyright (c) Microsoft Corporation.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to
+deal in the Software without restriction, including without limitation the
+rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+sell copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+
+
+--------------------------------------------------------------------------------
+ONNX (model format)
+--------------------------------------------------------------------------------
+License:  MIT (specification), Apache-2.0 (some reference implementations)
+Source:   https://github.com/onnx/onnx
+
+The ONNX format is what mnemos consumes and produces. No source is bundled.
+
+
+--------------------------------------------------------------------------------
+InsightFace buffalo family — model weights
+--------------------------------------------------------------------------------
+Models:     buffalo_s, buffalo_m, buffalo_l
+Format:     ONNX (cpu / nvidia) and RKNN (rockchip)
+Downloaded: at runtime from MNEMOS_MANIFEST_URL, verified by SHA-256
+            before use. See docs/Model-Manifest.md.
+License:    MIT — Copyright (c) 2021 deepinsight
+
+The MIT License (for the buffalo model weights)
+
+    Copyright (c) 2021 deepinsight
+    Copyright (c) 2015 Jianwei Yang (detector training was originally based
+                              on YOLO darknet)
+
+    Permission is hereby granted, free of charge, to any person obtaining a
+    copy of this software and associated documentation files (the
+    "Software"), to deal in the Software without restriction, including
+    without limitation the rights to use, copy, modify, merge, publish,
+    distribute, sublicense, and/or sell copies of the Software, and to
+    permit persons to whom the Software is furnished to do so, subject to
+    the following conditions:
+
+    The above copyright notice and this permission notice shall be
+    included in all copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+    EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+    IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+    CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+    TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+    SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+Source:    https://github.com/deepinsight/insightface
+           (model_zoo / buffalo_l, buffalo_m, buffalo_s)
+
+If you ship a self-hosted mirror or a derived image, keep this copyright
+notice with the weights. The detection / recognition ONNX files are
+unmodified from the upstream releases.
+
+
+--------------------------------------------------------------------------------
+librknnrt.so  (Rockchip NPU runtime, only used on the rockchip provider)
+--------------------------------------------------------------------------------
+Downloaded: at image build time from
+            https://github.com/airockchip/rknn-toolkit2 (tag v2.3.0),
+            verified against a SHA-256 declared in the Dockerfile.
+License:    See upstream rknn-toolkit2 project for the current license
+            terms. It is the runtime that backs the rockchip provider only;
+            the cpu and nvidia providers do not use it.

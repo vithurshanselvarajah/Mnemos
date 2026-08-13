@@ -62,5 +62,9 @@ def pair_with_master_key(req: PairRequest):
     expected = ensure_master_key()
     if not compare_digest(req.master_key.strip(), expected):
         raise HTTPException(status_code=401, detail="Invalid master key")
-    row, raw = create_api_key(req.name, PermissionLevel.FULL_ADMIN.value)
+    row, raw = create_api_key(
+        req.name,
+        PermissionLevel.FULL_ADMIN.value,
+        is_pairing_key=True,
+    )
     return PairResponse(api_key_id=row.id, key_prefix=row.key_prefix, raw_key=raw)

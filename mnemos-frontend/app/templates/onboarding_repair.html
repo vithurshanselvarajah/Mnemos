@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Re-pair with backend · Mnemos{% endblock %}
+{% block content %}
+<div class="row between" style="margin-bottom: 1rem">
+  <div>
+    <p class="muted" style="margin: 0 0 .25rem"><a href="/dashboard"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Back to dashboard</a></p>
+    <h1 style="margin: 0">Re-pair with backend</h1>
+    <p class="muted" style="margin: .25rem 0 0">
+      Replace the stored backend connection. The previous API key is discarded and a fresh pairing key is minted.
+    </p>
+  </div>
+</div>
+
+{% if request.query_params.get('ok') %}
+<div class="alert ok" style="margin-top: 1rem">
+  <strong>Re-pair successful.</strong> The new pairing key is active. The model is warming up in the background — first identify may be slow.
+</div>
+{% endif %}
+
+<div class="card" style="margin-top: 1rem">
+  <h3 style="margin:0 0 .5rem">Current connection</h3>
+  {% if current_node %}
+    <p>URL: <code>{{ current_node.base_url }}</code></p>
+    <p>Key prefix: <code>{{ current_node.api_key[:8] }}…</code></p>
+    <p>Node name: <code>{{ current_node.name }}</code></p>
+  {% else %}
+    <p><span class="status warn">No backend configured</span></p>
+  {% endif %}
+</div>
+
+<div class="card" style="margin-top: 1rem">
+  <h3 style="margin:0 0 .5rem">New connection</h3>
+  <p class="muted" style="margin: 0 0 1rem">
+    Run <code>docker exec -it mnemos-backend python -m app.cli master-key view</code> on the new backend to get the master key.
+  </p>
+  {% if error %}<div class="alert error" style="margin-top: 0">{{ error }}</div>{% endif %}
+  <form method="post" action="/onboarding/repair" style="margin-top: 1rem">
+    <label>Backend base URL
+      <input name="base_url" required
+             value="{{ form_values.base_url if form_values and form_values.base_url else (current_node.base_url if current_node else 'http://mnemos-backend:8000') }}" />
+    </label>
+    <label>Master pairing key
+      <input name="master_key" type="password" required autocomplete="off"
+             value="{{ form_values.master_key if form_values and form_values.master_key else '' }}" />
+    </label>
+    <label>Node name
+      <input name="name" value="{{ form_values.name if form_values and form_values.name else (current_node.name if current_node else 'Frontend') }}" />
+    </label>
+    <div class="row" style="margin-top: 1rem">
+      <button type="submit" style="flex:1">Re-pair with backend</button>
+      <a class="btn ghost" href="/dashboard" style="flex: 0 0 auto">Cancel</a>
+    </div>
+  </form>
+  {% if warmup.running or warmup.done %}
+  <div class="hint" style="margin-top: 1rem">
+    {% if warmup.running %}
+      <span class="htmx-indicator"></span>
+      Model warm-up in progress…
+    {% elif warmup.error %}
+      <span class="status error">Warm-up error</span> {{ warmup.error }}
+    {% else %}
+      <span class="status ok">Model warmed up</span>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

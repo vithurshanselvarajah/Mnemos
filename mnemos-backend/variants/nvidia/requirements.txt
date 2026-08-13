@@ -1,0 +1,2 @@
+onnxruntime-gpu==1.27.0
+insightface==1.0.1

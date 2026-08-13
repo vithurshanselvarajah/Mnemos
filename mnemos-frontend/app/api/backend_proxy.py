@@ -169,6 +169,12 @@ def proxy_model_warmup():
     return Response(content=r.content, status_code=r.status_code, media_type="application/json")
 
 
+@router.get("/models/available")
+def proxy_models_available():
+    r = get_sync("/api/v1/models/available")
+    return Response(content=r.content, status_code=r.status_code, media_type="application/json")
+
+
 @router.get("/inbox")
 def proxy_inbox(page: int = 1, page_size: int = 24):
     r = get_sync(f"/api/v1/faces/unassigned?page={page}&page_size={page_size}")
@@ -215,7 +221,16 @@ def proxy_person_crop_delete(person_id: UUID, crop_id: UUID, request: Request):
     from app.services.backend_client import request
 
     r = request("DELETE", f"/api/v1/persons/{person_id}/crops/{crop_id}")
-    return Response(content=r.content, status_code=r.status_code, media_type="application/json")
+    if r.status_code >= 400:
+        return Response(
+            content=r.content,
+            status_code=r.status_code,
+            media_type="application/json",
+        )
+    # Success: return an empty body so the HTMX outerHTML swap on
+    # `#photo-{crop_id}` removes the element cleanly instead of replacing
+    # it with the raw JSON response.
+    return Response(status_code=200)
 
 
 @router.get("/keys")
@@ -345,9 +360,6 @@ async def proxy_catch_all(full_path: str, request: Request):
 
 @router.api_route("/{full_path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def proxy_root_paths(full_path: str, request: Request):
-    """Catch-all for backend paths that don't live under /api/v1
-    (e.g. /healthz, /readyz). Falls through to backend's same path.
-    """
     require_admin(request)
     return await _proxy_passthrough("/" + full_path, request)
 

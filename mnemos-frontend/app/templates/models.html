@@ -9,6 +9,16 @@
 </div>
 
 <div class="card">
+  <h3>Provider &amp; runtime</h3>
+  <div id="provider-runtime"
+       hx-get="/partials/provider-runtime"
+       hx-trigger="load, every 2s"
+       hx-swap="innerHTML">
+    <p class="muted">Loading…</p>
+  </div>
+</div>
+
+<div class="card">
   <h3>Active model</h3>
   <div id="reindex-status"
        hx-get="/partials/reindex-status"
@@ -22,23 +32,75 @@
 <div class="card"
      x-data="modelSwitcher()"
      x-init="init()">
-  <h3>Switch model</h3>
-  <form @submit.prevent="onSubmit()"
-        class="row" style="gap:.5rem">
-    <label style="margin:0;flex:1">New model
-      <select name="name" x-model="target">
-        <option value="buffalo_s">buffalo_s — fast, default</option>
-        <option value="buffalo_l">buffalo_l — more accurate, larger</option>
-      </select>
-    </label>
-    <button type="submit" :disabled="busy" :class="{ working: busy }">
-      <span x-show="!busy">Switch &amp; re-index</span>
-      <span x-show="busy" x-cloak>
-        <span class="spinner-inline"></span>
-        Switching…
-      </span>
-    </button>
-  </form>
+  <h3>Available models</h3>
+  <p class="muted" style="margin-top:-.25rem">
+    Weights are pulled from the configured manifest and verified against each file's
+    <abbr title="SHA-256 cryptographic hash">sha256</abbr> before use. Downloads are
+    resumable; if a file already exists with the right size and hash, it is reused.
+  </p>
+
+  <div x-show="available.length === 0 && !availableError" class="muted" style="padding:.5rem 0">
+    Loading manifest…
+  </div>
+  <div x-show="availableError" class="model-result is-error" x-cloak>
+    <div class="model-result__row">
+      <div class="model-result__icon" aria-hidden="true">
+        <span class="model-result__icon-fail">!</span>
+      </div>
+      <div class="model-result__copy">
+        <div class="model-result__title err">
+          <strong>Could not load the model manifest.</strong>
+        </div>
+        <div class="model-result__hint" x-text="availableError"></div>
+      </div>
+    </div>
+  </div>
+
+  <ul class="model-list" x-show="available.length > 0">
+    <template x-for="m in available" :key="m.name">
+      <li class="model-list__item" :class="{ 'is-active': m.name === activeName, 'is-selected': m.name === target }">
+        <div class="model-list__head">
+          <div>
+            <div class="model-list__name">
+              <code x-text="m.name"></code>
+              <span class="muted" x-text="' — ' + m.kind"></span>
+            </div>
+            <div class="muted" style="font-size:.85rem">
+              <span x-text="m.artifacts.length"></span> file(s) ·
+              <span x-text="formatBytes(m.artifacts.reduce((a,b)=>a+b.size_bytes,0))"></span> total
+              <span x-show="m.ready"> · <span class="status ok sm">verified</span></span>
+            </div>
+          </div>
+          <button class="btn sm"
+                  type="button"
+                  :disabled="busy || m.name === activeName"
+                  @click="target = m.name; onSubmit()"
+                  x-text="m.name === activeName ? 'Active' : (busy && target === m.name ? 'Switching…' : 'Switch &amp; re-index')"></button>
+        </div>
+        <ul class="model-artifacts">
+          <template x-for="a in m.artifacts" :key="a.filename">
+            <li class="model-artifact" :class="artifactClass(m.name, a)">
+              <div class="model-artifact__row">
+                <code class="model-artifact__name" x-text="a.filename"></code>
+                <span class="muted" x-text="formatBytes(a.size_bytes)"></span>
+                <span class="model-artifact__badge" x-text="artifactBadge(m.name, a)"></span>
+                <button type="button"
+                        class="btn ghost xs"
+                        @click="copySha(a.sha256)"
+                        title="Copy sha256">
+                  <code class="model-artifact__sha" x-text="shortSha(a.sha256)"></code>
+                </button>
+              </div>
+              <div class="model-artifact__progress" x-show="artifactInFlight(m.name, a)" x-cloak>
+                <div class="bar"><i :style="artifactBarStyle(m.name, a)"></i></div>
+                <span class="muted" x-text="artifactProgressLabel(m.name, a)"></span>
+              </div>
+            </li>
+          </template>
+        </ul>
+      </li>
+    </template>
+  </ul>
 
   <div class="model-result" :class="'is-' + state" x-show="state !== 'idle'" x-cloak>
     <div class="model-result__row">
@@ -92,13 +154,17 @@
     return {
       target: 'buffalo_s',
       busy: false,
-      state: 'idle',          // idle | busy | error
-      phase: 'reindexing',    // preparing | reindexing
+      state: 'idle',
+      phase: 'reindexing',
       errorMessage: '',
       downloadDone: 0,
       downloadTotal: 0,
       reindexDone: 0,
       reindexTotal: 0,
+      available: [],
+      availableError: '',
+      activeName: '',
+      artifactProgress: {},
       get downloadPct() {
         if (!this.downloadTotal) return null;
         return Math.min(100, Math.round(100 * this.downloadDone / this.downloadTotal));
@@ -106,29 +172,91 @@
       get downloadLabel() {
         const pct = this.downloadPct;
         if (pct === null) {
-          if (this.downloadDone) {
-            return `(${this._formatBytes(this.downloadDone)} downloaded)`;
-          }
+          if (this.downloadDone) return `(${this.formatBytes(this.downloadDone)} downloaded)`;
           return '…';
         }
-        return `(${pct}%, ${this._formatBytes(this.downloadDone)} / ${this._formatBytes(this.downloadTotal)})`;
+        return `(${pct}%, ${this.formatBytes(this.downloadDone)} / ${this.formatBytes(this.downloadTotal)})`;
       },
       get downloadBarStyle() {
         const pct = this.downloadPct;
-        if (pct === null) {
-          return 'width: 0';
-        }
-        return `width: ${pct}%`;
+        return pct === null ? 'width: 0' : `width: ${pct}%`;
       },
-      _formatBytes(n) {
+      formatBytes(n) {
         if (!n) return '0 B';
         const units = ['B', 'KB', 'MB', 'GB'];
         let i = 0;
-        while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
-        return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${units[i]}`;
+        let v = n;
+        while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+        return `${v.toFixed(v < 10 && i > 0 ? 1 : 0)} ${units[i]}`;
       },
-      _pollTimer: null,
+      shortSha(s) {
+        if (!s) return '';
+        return s.length > 12 ? `${s.slice(0, 7)}…${s.slice(-4)}` : s;
+      },
+      async copySha(s) {
+        try {
+          await navigator.clipboard.writeText(s || '');
+        } catch (_) { /* clipboard not available */ }
+      },
+      artifactKey(name, a) { return `${name}::${a.filename}`; },
+      artifactInFlight(name, a) {
+        if (!this.busy) return false;
+        if (this.target && this.target !== name) return false;
+        return !!this.artifactProgress[this.artifactKey(name, a)];
+      },
+      artifactClass(name, a) {
+        if (a.present) return 'is-present';
+        return this.artifactInFlight(name, a) ? 'is-downloading' : 'is-missing';
+      },
+      artifactBadge(name, a) {
+        if (a.present) return 'verified';
+        if (this.artifactInFlight(name, a)) return 'downloading';
+        return 'pending';
+      },
+      artifactBarStyle(name, a) {
+        const p = this.artifactProgress[this.artifactKey(name, a)];
+        if (!p || !p.total) return 'width: 0';
+        return `width: ${Math.min(100, Math.round(100 * p.done / p.total))}%`;
+      },
+      artifactProgressLabel(name, a) {
+        const p = this.artifactProgress[this.artifactKey(name, a)];
+        if (!p) return '';
+        const pct = p.total ? Math.round(100 * p.done / p.total) : 0;
+        return `${a.filename}: ${pct}% (${this.formatBytes(p.done)} / ${this.formatBytes(p.total)})`;
+      },
+      async refreshActive() {
+        try {
+          const r = await fetch('/backend/models', { credentials: 'same-origin' });
+          if (!r.ok) return;
+          const data = await r.json();
+          this.activeName = data.name || '';
+          if (data.name && this.available.length && !this.available.find(m => m.name === this.target)) {
+            this.target = data.name;
+          }
+        } catch (_) {}
+      },
+      async refreshAvailable() {
+        try {
+          const r = await fetch('/backend/models/available', { credentials: 'same-origin' });
+          if (!r.ok) {
+            this.availableError = `Backend returned ${r.status}.`;
+            this.available = [];
+            return;
+          }
+          const data = await r.json();
+          this.available = Array.isArray(data) ? data : [];
+          this.availableError = '';
+          if (this.available.length && !this.available.find(m => m.name === this.target)) {
+            this.target = this.available[0].name;
+          }
+        } catch (e) {
+          this.availableError = `Could not reach the model manifest: ${e.message}`;
+          this.available = [];
+        }
+      },
       init() {
+        this.refreshActive();
+        this.refreshAvailable();
         document.addEventListener('ws:reindex.start', (e) => {
           this.state = 'busy';
           this.phase = (e.detail && e.detail.phase) || 'reindexing';
@@ -136,12 +264,14 @@
           if (this.phase === 'reindexing') {
             this.downloadDone = 0;
             this.downloadTotal = 0;
+            this.artifactProgress = {};
           }
         });
         document.addEventListener('ws:reindex.preparing', () => {
           this.phase = 'preparing';
           this.downloadDone = 0;
           this.downloadTotal = 0;
+          this.artifactProgress = {};
         });
         document.addEventListener('ws:reindex.progress', (e) => {
           this.phase = 'reindexing';
@@ -155,6 +285,14 @@
           this.phase = 'preparing';
           this.downloadDone = e.detail.done || 0;
           this.downloadTotal = e.detail.total || 0;
+          const m = e.detail.model || this.target;
+          const a = e.detail.artifact;
+          if (m && a) {
+            this.artifactProgress = {
+              ...this.artifactProgress,
+              [`${m}::${a}`]: { done: e.detail.done || 0, total: e.detail.total || 0 },
+            };
+          }
         });
         document.addEventListener('ws:reindex.done', () => {
           this.state = 'idle';
@@ -164,9 +302,14 @@
           this.downloadTotal = 0;
           this.reindexDone = 0;
           this.reindexTotal = 0;
+          this.artifactProgress = {};
+          this.refreshActive();
+          this.refreshAvailable();
           try {
             const el = document.getElementById('reindex-status');
             if (el && window.htmx) htmx.trigger(el, 'load');
+            const pr = document.getElementById('provider-runtime');
+            if (pr && window.htmx) htmx.trigger(pr, 'load');
           } catch (_) {}
         });
         document.addEventListener('ws:reindex.error', (e) => {
@@ -181,6 +324,7 @@
         this.state = 'busy';
         this.phase = 'preparing';
         this.errorMessage = '';
+        this.artifactProgress = {};
         try {
           const r = await fetch('/backend/models/switch', {
             method: 'POST',
@@ -205,6 +349,8 @@
           try {
             const el = document.getElementById('reindex-status');
             if (el && window.htmx) htmx.trigger(el, 'load');
+            const pr = document.getElementById('provider-runtime');
+            if (pr && window.htmx) htmx.trigger(pr, 'load');
           } catch (_) {}
         } catch (e) {
           this.busy = false;

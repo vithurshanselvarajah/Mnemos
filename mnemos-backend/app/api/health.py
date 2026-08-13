@@ -3,11 +3,13 @@ from __future__ import annotations
 from fastapi import APIRouter
 from sqlalchemy import text
 
+from app.core.config import settings
 from app.core.version import get_version
 from app.db.session import get_engine
-from app.schemas.dto import HealthOut
+from app.schemas.dto import HealthOut, NvidiaGpuInfo
 from app.services import vector_repo
 from app.services.engine import InsightFaceEngine
+from app.services.model_manifest import _detect_rockchip_soc
 from app.services.reindex import active_model, state
 
 router = APIRouter()
@@ -33,8 +35,21 @@ def healthz() -> HealthOut:
     except Exception:
         db_ok = False
     snap = state.snapshot()
-    model_loaded = InsightFaceEngine.current().is_loaded()
+    engine = InsightFaceEngine.current()
+    model_loaded = engine.is_loaded()
     vector_ok = vector_repo.ping()
+
+    nvidia_info: NvidiaGpuInfo | None = None
+    if settings.provider == "nvidia":
+        from app.providers.nvidia import detect_cuda_provider
+
+        info = detect_cuda_provider()
+        info["active_providers"] = engine.active_providers()
+        inner_err = engine.last_error()
+        if inner_err and not info["last_error"]:
+            info["last_error"] = inner_err
+        nvidia_info = NvidiaGpuInfo(**info)
+
     return HealthOut(
         status="ok" if (db_ok and vector_ok and model_loaded) else "degraded",
         version=get_version(),
@@ -45,4 +60,7 @@ def healthz() -> HealthOut:
         reindex_in_progress=snap["running"],
         reindex_done=snap["done"],
         reindex_total=snap["total"],
+        provider=settings.provider,
+        rockchip_soc=_detect_rockchip_soc() if settings.provider == "rockchip" else None,
+        nvidia=nvidia_info,
     )

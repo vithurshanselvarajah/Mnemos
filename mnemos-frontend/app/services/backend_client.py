@@ -78,3 +78,27 @@ async def ping() -> tuple[bool, dict]:
             return True, r.json()
     except Exception as e:
         return False, {"error": str(e)}
+
+
+def backup_list() -> httpx.Response:
+    return get_sync("/api/v1/backup")
+
+
+def backup_create() -> httpx.Response:
+    return post_sync("/api/v1/backup")
+
+
+def backup_inspect(filename: str) -> httpx.Response:
+    return get_sync(f"/api/v1/backup/{filename}/inspect")
+
+
+def backup_delete(filename: str) -> httpx.Response:
+    return request("DELETE", f"/api/v1/backup/{filename}")
+
+
+def backup_restore(filename: str) -> httpx.Response:
+    return post_sync("/api/v1/backup/restore", json={"filename": filename, "confirm": True})
+
+
+def backup_restore_status(job_id: str) -> httpx.Response:
+    return get_sync(f"/api/v1/backup/restore/{job_id}")

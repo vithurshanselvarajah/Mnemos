@@ -224,6 +224,15 @@ async def identify(request: Request, file: UploadFile = File(...)) -> IdentifyRe
     dets = engine.detect(img)
     dets = _dedupe_within_request(dets)
 
+    if not dets:
+        log.warning(
+            "identify: no faces detected in upload (size=%dx%d, model=%s); "
+            "consider lowering MNEMOS_MIN_FACE_PX or sending a higher-quality image",
+            _w,
+            _h,
+            model,
+        )
+
     recognized: list[IdentifyMatch] = []
     unknowns: list[IdentifyUnknownFace] = []
     base_threshold = float(settings.default_threshold)

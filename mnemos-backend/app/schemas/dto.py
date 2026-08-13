@@ -97,12 +97,30 @@ class ModelInfo(BaseModel):
     reindex_done: int = Field(description="Number of crops already re-embedded.")
     download_active: bool = Field(description="True while model weights are being downloaded.")
     download_model: str | None = Field(description="Name of the model currently being downloaded, if any.")
+    download_artifact: str | None = Field(
+        description="Filename of the artifact currently being downloaded, if any."
+    )
     download_done: int = Field(description="Bytes downloaded so far for the current download.")
     download_total: int = Field(description="Total bytes to download for the current model.")
 
 
 class ModelSwitchRequest(BaseModel):
-    name: str = Field(description="Target model name. One of `buffalo_s` or `buffalo_l`.")
+    name: str = Field(description="Target model name. One of `buffalo_s`, `buffalo_m`, or `buffalo_l`.")
+
+
+class ModelArtifactOut(BaseModel):
+    filename: str
+    size_bytes: int
+    sha256: str
+    local_path: str
+    present: bool
+
+
+class ModelAvailable(BaseModel):
+    name: str
+    kind: str
+    ready: bool
+    artifacts: list[ModelArtifactOut]
 
 
 class ApiKeyOut(BaseModel):
@@ -113,6 +131,13 @@ class ApiKeyOut(BaseModel):
     expires_at: datetime | None = None
     created_at: datetime
     revoked_at: datetime | None = None
+    is_pairing_key: bool = Field(
+        default=False,
+        description=(
+            "True when this key was minted by /system/pair to bootstrap the "
+            "frontend↔backend link. Pairing keys are filtered out of the keys list."
+        ),
+    )
 
 
 class ApiKeyCreate(BaseModel):
@@ -137,6 +162,29 @@ class PairResponse(BaseModel):
     raw_key: str
 
 
+class NvidiaGpuInfo(BaseModel):
+    onnxruntime_available: bool = Field(
+        description="True when the onnxruntime package could be imported in this process."
+    )
+    cuda_available: bool = Field(
+        description="True when onnxruntime reports the CUDAExecutionProvider is available."
+    )
+    device_count: int = Field(
+        description="Number of NVIDIA GPUs that successfully exposed a libcuda handle at boot. 0 when not detectable."
+    )
+    available_providers: list[str] = Field(
+        description="All execution providers reported by onnxruntime at startup."
+    )
+    active_providers: list[str] = Field(
+        description="The execution providers actually bound to the running engine. "
+        'For the NVIDIA variant this is always exactly `["CUDAExecutionProvider"]` — '
+        "the engine is hard-locked and never falls back to CPU."
+    )
+    last_error: str | None = Field(
+        description="Most recent CUDA-side error, or null if everything is healthy."
+    )
+
+
 class HealthOut(BaseModel):
     status: str = Field(
         description="`ok` only when the database, vector DB, and model are all healthy. "
@@ -153,3 +201,10 @@ class HealthOut(BaseModel):
     reindex_in_progress: bool = Field(description="True while a switch-and-reindex is running.")
     reindex_done: int = Field(description="Crops re-embedded so far.")
     reindex_total: int = Field(description="Total crops to re-embed, or 0 when idle.")
+    provider: str = Field(description="Active inference provider: `cpu`, `nvidia`, or `rockchip`.")
+    rockchip_soc: str | None = Field(
+        description="Detected (or overridden) Rockchip SoC. `null` when the provider is not Rockchip."
+    )
+    nvidia: NvidiaGpuInfo | None = Field(
+        description="Detailed NVIDIA / CUDA status. `null` when the active provider is not `nvidia`."
+    )

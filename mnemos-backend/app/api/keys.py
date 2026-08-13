@@ -26,7 +26,20 @@ def _to_out(row: ApiKey) -> ApiKeyOut:
         expires_at=row.expires_at,
         created_at=row.created_at,
         revoked_at=row.revoked_at,
+        is_pairing_key=row.is_pairing_key,
     )
+
+
+def _require_not_pairing(row: ApiKey) -> None:
+    if row.is_pairing_key:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "This key was minted by /system/pair to link the frontend and backend. "
+                "It is managed out-of-band and cannot be revoked or deleted from this UI. "
+                "Rotate the master key and re-pair to replace it."
+            ),
+        )
 
 
 @router.get(
@@ -34,11 +47,21 @@ def _to_out(row: ApiKey) -> ApiKeyOut:
     response_model=list[ApiKeyOut],
     tags=["keys"],
     summary="List API keys",
-    description="Returns every API key (including revoked ones) ordered by creation time. Requires a Full-Admin API key.",
+    description=(
+        "Returns every user-managed API key (including revoked ones) ordered by creation "
+        "time. Pairing keys minted by /system/pair are filtered out — they are internal "
+        "link keys and cannot be managed from this list. Requires a Full-Admin API key."
+    ),
 )
 def list_keys(_: ApiKey = Depends(require_full_admin)) -> list[ApiKeyOut]:
     with session_scope() as s:
-        rows = s.execute(select(ApiKey).order_by(ApiKey.created_at.desc())).scalars().all()
+        rows = (
+            s.execute(
+                select(ApiKey).where(ApiKey.is_pairing_key.is_(False)).order_by(ApiKey.created_at.desc())
+            )
+            .scalars()
+            .all()
+        )
         return [_to_out(r) for r in rows]
 
 
@@ -79,6 +102,7 @@ def revoke_key(key_id: uuid.UUID, _: ApiKey = Depends(require_full_admin)) -> Ap
         row = s.get(ApiKey, key_id)
         if row is None:
             raise HTTPException(status_code=404, detail="not found")
+        _require_not_pairing(row)
         row.revoked_at = datetime.utcnow()
         s.add(row)
         s.flush()
@@ -97,5 +121,6 @@ def delete_key(key_id: uuid.UUID, _: ApiKey = Depends(require_full_admin)) -> di
         row = s.get(ApiKey, key_id)
         if row is None:
             raise HTTPException(status_code=404, detail="not found")
+        _require_not_pairing(row)
         s.delete(row)
     return {"ok": True}

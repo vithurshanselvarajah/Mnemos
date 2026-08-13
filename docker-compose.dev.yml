@@ -23,21 +23,26 @@ services:
       - "5432:5432"
 
   # ---------------------------------------------------------------------------
-  # Mnemos backend (Headless API + InsightFace CPU + crop storage)
+  # Mnemos backend (Headless API + InsightFace provider-aware: cpu/nvidia/rockchip)
+  # Override MNEMOS_PROVIDER at deploy time to switch inference backend.
   # ---------------------------------------------------------------------------
   mnemos-backend:
     image: dev-mnemos-backend:local
     build:
       context: ./mnemos-backend
       dockerfile: Dockerfile
+      args:
+        INSTALL_PROVIDER: ${MNEMOS_PROVIDER:-cpu}
     container_name: dev-mnemos-backend
     restart: unless-stopped
     depends_on:
       mnemos-vector-db:
         condition: service_healthy
     environment:
+      MNEMOS_PROVIDER: ${MNEMOS_PROVIDER:-cpu}
       MNEMOS_DB_PATH: /data/backend.db
       MNEMOS_CROPS_DIR: /data/crops
+      MNEMOS_BACKUP_DIR: /data/backups
       MNEMOS_VECTOR_DSN: postgresql://mnemos:mnemos-pgvector-changeme@mnemos-vector-db:5432/dev_mnemos_vectors
       MNEMOS_DEFAULT_MODEL: buffalo_s
       MNEMOS_DET_SIZE: 640
@@ -56,6 +61,18 @@ services:
       timeout: 5s
       retries: 10
       start_period: 60s
+   # Uncomment the following lines to enable GPU support for the backend container (requires NVIDIA Container Toolkit)
+   # deploy:
+   #   resources:
+   #     reservations:
+   #       devices:
+   #         - driver: nvidia
+   #           count: all
+   #           capabilities: [gpu]
+   
+   # Uncomment the following lines to enable Rockchip RKNN support for the backend container
+   #  devices:
+   #    - /dev/dri/renderD129:/dev/dri/renderD129
 
   # ---------------------------------------------------------------------------
   # Mnemos frontend (Server-rendered management UI)

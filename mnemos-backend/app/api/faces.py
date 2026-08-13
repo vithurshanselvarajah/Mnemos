@@ -54,17 +54,29 @@ def _to_out(c: FaceCrop) -> FaceCropOut:
 def list_unassigned(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=24, ge=1, le=200),
+    count_only: bool = Query(
+        default=False,
+        description="Return only the total count without materialising the page. "
+        "Cheap for large inboxes; designed for polling clients.",
+    ),
 ) -> UnassignedPage:
     with session_scope() as s:
-        total = (
+        rows = (
             s.execute(select(FaceCrop).where(FaceCrop.status == FaceCropStatus.UNASSIGNED.value))
             .scalars()
             .all()
         )
-        n = len(total)
+        n = len(rows)
+        if count_only:
+            return UnassignedPage(total=n, page=1, page_size=0, items=[])
         start = (page - 1) * page_size
-        rows = total[start : start + page_size]
-        return UnassignedPage(total=n, page=page, page_size=page_size, items=[_to_out(r) for r in rows])
+        page_rows = rows[start : start + page_size]
+        return UnassignedPage(
+            total=n,
+            page=page,
+            page_size=page_size,
+            items=[_to_out(r) for r in page_rows],
+        )
 
 
 def _resolve_person(req: AssignRequest, s) -> Person:

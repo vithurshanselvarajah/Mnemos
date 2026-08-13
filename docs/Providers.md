@@ -233,21 +233,62 @@ The **mandatory** prerequisite is that the host is running the board vendor's BS
 
 On the BSP:
 
-1. Confirm the NPU device exists: `ls -l /dev/rknpu /dev/rknpu2 2>/dev/null`. You should see one (rk3588/rk3576/rk3568) or two (rk3588 dual-core NPU) device nodes owned by `root:render` or `root:video`. The `render`/`video` group is what the container needs write access to.
+1. Identify which device-node convention the kernel uses — see [NPU device nodes](#npu-device-nodes) below.
 2. Confirm `librknnrt.so` is shipped by the BSP. Most vendors put it in `/usr/lib/aarch64-linux-gnu/librknnrt.so`. If `ldconfig -p | grep rknnrt` is empty, the BSP is incomplete.
 3. Confirm the user running the container can read the NPU device (i.e. is in the `render` or `video` group, or you're running as root).
+
+#### NPU device nodes
+
+The Rockchip NPU surfaces through **two different device-node conventions** depending on the BSP kernel version. Use the one your board actually exposes:
+
+| Convention | Kernel | How to check | Device nodes |
+| --- | --- | --- | --- |
+| **Legacy char-misc** | Older BSPs (< 5.10), some vendor 4.4 kernels | `ls -l /dev/rknpu*` shows entries | `/dev/rknpu` (single NPU), `/dev/rknpu2` (rk3588's second NPU) |
+| **DRM render-node** | Newer BSPs (5.10+) with the upstream DRM rknpu driver | `ls -l /dev/dri/` shows `renderD128`, `renderD129`, … | `/dev/dri/renderD129` (NPU), `/dev/dri/renderD128` (rkvdec/VPU — not MNEMOS) |
+
+Concrete mapping you see on a typical `rk3588` MediaServer-style BSP:
+
+| Node | What it is |
+| --- | --- |
+| `/dev/dri/card0` | Primary DRM card (display + GPU/composer) |
+| `/dev/dri/card1` | Secondary DRM card (VPU/NPU auxiliary domain) |
+| `/dev/dri/renderD128` | `rkvdec2` / `rkvenc` — hardware video decoder pipeline |
+| `/dev/dri/renderD129` | `rknpu` — the NPU (RKNN runtime talks to this) |
+| `/dev/dma_heap/system` | DMA-BUF heap used by VPU and NPU buffers (no pass-through needed; RKNN uses `librknnrt.so`'s own allocator) |
+
+The key point: **`renderD128` is the video decoder, `renderD129` is the NPU** — passthrough `renderD129` (and only `renderD129`) for MNEMOS. If you map `card0`/`card1` you don't gain anything and you risk confusing Compose if the underlying kernel objects change naming at boot. `renderD128` belongs to the VPU and is **not** required by MNEMOS — leave it out.
+
+If both forms exist on the host, the engine prefers the legacy char-misc device (its IOCTL surface is older and more stable across runtime versions); if only the DRM render-node form exists (the common case on current `rk3588` BSPs), it falls back to `renderD129`. The `/healthz` response records which one was used.
 
 #### Host packages
 
 The build image already contains everything Python-side. The host only needs:
 
-- A 64-bit ARM (aarch64) Linux kernel 5.10+ with the vendor's NPU driver loaded
+- A 64-bit ARM (aarch64) Linux kernel 5.10+ with the vendor's NPU driver loaded (5.10+ if you rely on the DRM render-node path; < 5.10 still works via the legacy char-misc form)
 - `librknnrt.so` (vendored at build time from the BSP; the Dockerfile downloads a pinned copy at build time, but the host must have the matching driver)
 - `libgl1` and `libglib2.0-0` for OpenCV (pulled by the standard image)
 
 #### Device passthrough into the container
 
-The `mnemos-backend` service must have the NPU device bind-mounted. The compose block looks like this (apply it in both `docker-compose.yml` and `docker-compose.dev.yml` for the `mnemos-backend` service):
+The `mnemos-backend` service must have the NPU device bind-mounted. Apply one of the blocks below to **both** `docker-compose.yml` and `docker-compose.dev.yml` for the `mnemos-backend` service. The block is commented out by default so it doesn't affect non-rockchip deployments.
+
+**DRM render-node form** — what current `rk3588` BSPs (kernel 5.10+) need:
+
+```yaml
+    devices:
+      # rk3588 NPU via the upstream DRM render-node API.
+      # On rk3588 it's /dev/dri/renderD129; on rk3568/rk3576/rk3566 the
+      # exact render-node number can differ — replace with whatever
+      # `ls /dev/dri/renderD*` reports for the node owned by `root:render`.
+      - /dev/dri/renderD129:/dev/dri/renderD129
+    group_add:
+      - render                    # or "video", whichever the BSP uses
+    volumes:
+      # Bind the host BSP's librknnrt.so so it matches the host driver.
+      - /usr/lib/aarch64-linux-gnu/librknnrt.so:/usr/lib/librknnrt.so:ro
+```
+
+**Legacy char-misc form** — older BSPs that still register `/dev/rknpu{,2}`:
 
 ```yaml
     devices:
@@ -259,16 +300,26 @@ The `mnemos-backend` service must have the NPU device bind-mounted. The compose 
       - /usr/lib/aarch64-linux-gnu/librknnrt.so:/usr/lib/librknnrt.so:ro
 ```
 
+If both forms exist (you'll see both `/dev/rknpu*` and `/dev/dri/renderD129`), mount both — the engine will pick whichever responds first. Mounting both is harmless; only the first reachable one is used.
+
 The `:ro` mount of `librknnrt.so` is intentional: the in-container ctypes shim loads the **host's** RKNN runtime (so it always matches the host driver). The Dockerfile's vendored copy is only a fallback for `aarch64` builds on systems without a BSP at build time.
 
 #### Verifying
 
 ```bash
 # On the host (BSP)
-ls -l /dev/rknpu* /usr/lib/aarch64-linux-gnu/librknnrt.so 2>/dev/null
+ls -l /dev/rknpu* /dev/dri/renderD* /usr/lib/aarch64-linux-gnu/librknnrt.so 2>/dev/null
 cat /proc/device-tree/compatible
 
-# From a throwaway container
+# From a throwaway container (DRM render-node form — current BSPs)
+docker run --rm \
+  --device /dev/dri/renderD129 \
+  --group-add render \
+  -v /usr/lib/aarch64-linux-gnu/librknnrt.so:/usr/lib/librknnrt.so:ro \
+  ghcr.io/vithurshanselvarajah/mnemos-backend:latest-rockchip \
+  python -c "from ctypes import CDLL; CDLL('librknnrt.so'); print('ok')"
+
+# From a throwaway container (legacy char-misc form — older BSPs)
 docker run --rm \
   --device /dev/rknpu --device /dev/rknpu2 \
   --group-add render \
@@ -279,10 +330,10 @@ docker run --rm \
 # Full stack
 MNEMOS_PROVIDER=rockchip docker compose up -d
 docker compose logs -f mnemos-backend
-# Look for: provider=rockchip, GET /healthz → rockchip.npu_available: true
+# Look for: provider=rockchip, GET /healthz → rockchip.npu_available: true, rockchip.npu_device: "renderD129" (or "/dev/rknpu")
 ```
 
-If `/dev/rknpu` is missing, the BSP kernel isn't loaded with the NPU driver. If the ctypes load fails with `cannot open shared object file`, the bind-mount path is wrong (the vendor's library path may differ).
+If `/dev/dri/renderD129` (and `/dev/rknpu`) are missing, the BSP kernel isn't loaded with the NPU driver. If the ctypes load fails with `cannot open shared object file`, the bind-mount path is wrong (the vendor's library path may differ). If you see `init_runtime: DRV` in the logs, the host's `librknnrt.so` is older than the kernel driver — upgrade the BSP runtime, or reflash the BSP image.
 
 ## Picking a provider
 

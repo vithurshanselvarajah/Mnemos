@@ -54,6 +54,19 @@ services:
       timeout: 5s
       retries: 10
       start_period: 60s
+   
+   # Uncomment the following lines to enable GPU support for the backend container (requires NVIDIA Container Toolkit)
+   # deploy:
+   #   resources:
+   #     reservations:
+   #       devices:
+   #         - driver: nvidia
+   #           count: all
+   #           capabilities: [gpu]
+   
+   # Uncomment the following lines to enable Rockchip RKNN support for the backend container
+   #  devices:
+   #    - /dev/dri/renderD129:/dev/dri/renderD129
       
   # ---------------------------------------------------------------------------
   # Mnemos frontend (Server-rendered management UI)

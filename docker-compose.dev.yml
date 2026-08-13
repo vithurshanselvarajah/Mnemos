@@ -61,6 +61,16 @@ services:
       timeout: 5s
       retries: 10
       start_period: 60s
+    # GPU: hand the host driver to the container so onnxruntime-gpu can
+    # load libcuda and bind CUDAExecutionProvider. No-op on hosts without
+    # an NVIDIA driver (Compose just warns).
+   # deploy:
+   #   resources:
+   #     reservations:
+   #       devices:
+   #         - driver: nvidia
+   #           count: all
+   #           capabilities: [gpu]
 
   # ---------------------------------------------------------------------------
   # Mnemos frontend (Server-rendered management UI)

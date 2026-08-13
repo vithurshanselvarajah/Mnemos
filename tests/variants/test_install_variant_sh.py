@@ -41,14 +41,15 @@ def test_install_variant_sh_excludes_override_pkg():
     assert "grep -v" in content
 
 
-def test_install_variant_sh_uses_no_deps():
-    content = INSTALL_SCRIPT.read_text()
-    assert "--no-deps" in content
-
-
 def test_install_variant_sh_installs_override_with_prefer_binary():
     content = INSTALL_SCRIPT.read_text()
     assert "--prefer-binary" in content
+    assert "override_pkg" in content
+
+
+def test_install_variant_sh_installs_override_with_deps():
+    content = INSTALL_SCRIPT.read_text()
+    assert "--upgrade" in content
     assert "override_pkg" in content
 
 

@@ -21,6 +21,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
+# CUDA/cuDNN runtime for NVIDIA variant.
+RUN if [ "${INSTALL_PROVIDER}" = "nvidia" ]; then \
+        curl -fsSL -o /tmp/cuda-keyring.deb \
+          "https://developer.download.nvidia.com/compute/cuda/repos/debian13/x86_64/cuda-keyring_1.1-1_all.deb" \
+        && dpkg -i /tmp/cuda-keyring.deb \
+        && rm -f /tmp/cuda-keyring.deb \
+        && apt-get update \
+        && apt-get install -y --no-install-recommends \
+            cuda-libraries-13-3 \
+            libcudnn9-cuda-13 \
+        && rm -rf /var/lib/apt/lists/*; \
+    fi
+
+ENV CUDA_HOME=/usr/local/cuda
+
 WORKDIR /srv
 
 COPY requirements.txt /srv/requirements.txt
@@ -46,25 +61,13 @@ RUN mkdir -p /data/crops /data/backups /srv/models
 
 ARG RKNN_TOOLKIT_VERSION=v2.3.0
 ARG RKNN_RT_SHA256=73993ed4b440460825f21611731564503cc1d5a0c123746477da6cd574f34885
+
 RUN if [ "${INSTALL_PROVIDER}" = "rockchip" ]; then \
         curl -fsSL -o /usr/lib/librknnrt.so \
           "https://github.com/airockchip/rknn-toolkit2/raw/refs/tags/${RKNN_TOOLKIT_VERSION}/rknpu2/runtime/Linux/librknn_api/aarch64/librknnrt.so" \
-          && echo "${RKNN_RT_SHA256}  /usr/lib/librknnrt.so" | sha256sum -c - \
-          && chmod 644 /usr/lib/librknnrt.so ; \
+        && echo "${RKNN_RT_SHA256}  /usr/lib/librknnrt.so" | sha256sum -c - \
+        && chmod 644 /usr/lib/librknnrt.so; \
     fi
-
-RUN if [ "${INSTALL_PROVIDER}" = "nvidia" ]; then \
-        apt-get update && apt-get install -y --no-install-recommends gnupg \
-          && curl -fsSL -o /usr/share/keyrings/cuda-archive-keyring.gpg \
-             "https://developer.download.nvidia.com/compute/cuda/repos/debian13/x86_64/cuda-keyring_1.1-1_all.deb" \
-          && dpkg -i /usr/share/keyrings/cuda-archive-keyring.gpg \
-          && apt-get update \
-          && apt-get install -y --no-install-recommends cuda-libraries-13-3 \
-          && ln -sf /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/lib/libcuda.so.1 \
-          && rm -rf /var/lib/apt/lists/* ; \
-    fi
-ENV CUDA_HOME=/usr/local/cuda \
-    PATH=/usr/local/cuda/bin:${PATH}
 
 EXPOSE 8000
 

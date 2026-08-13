@@ -1,11 +1,18 @@
-<div id="restore-status">
+<div id="{{ target_id | default('restore-status') }}">
 {% if job.status == 'done' %}
   <div class="alert ok">
     <strong>Restore complete.</strong>
     <code>{{ filename }}</code> has been applied. The model is reloading — give it a few seconds, then refresh the page.
-    <p style="margin-top:.5rem">
-      <a class="btn ghost sm" href="/dashboard">Back to dashboard</a>
-    </p>
+    <div
+      hx-get="/partials/backup/restore-verify/{{ job.id }}?target_id={{ target_id | default('restore-status') }}"
+      hx-trigger="load delay:2s"
+      hx-swap="outerHTML"
+      hx-target="#{{ target_id | default('restore-status') }}"
+      hx-indicator="#{{ target_id | default('restore-status') }}-spinner"
+      style="margin-top:.5rem">
+      <span id="{{ target_id | default('restore-status') }}-spinner" class="htmx-indicator"></span>
+      Checking the stored API key against the restored backend…
+    </div>
   </div>
 {% elif job.status == 'error' %}
   <div class="alert error">
@@ -14,12 +21,12 @@
 {{ job.error or '' }}</pre>
   </div>
 {% else %}
-  <div class="card" hx-get="/partials/backup/restore-status/{{ job.id }}"
+  <div class="card" hx-get="/partials/backup/restore-status/{{ job.id }}?target_id={{ target_id | default('restore-status') }}"
        hx-trigger="load delay:1s, every 2s"
        hx-swap="outerHTML"
-       hx-target="#restore-status">
+       hx-target="#{{ target_id | default('restore-status') }}">
     <div class="row" style="gap:.5rem; align-items:center">
-      <span class="htmx-indicator" style="display: inline-flex"></span>
+      <span class="htmx-indicator"></span>
       <strong>Restoring {{ filename }}…</strong>
     </div>
     {% if job.log %}

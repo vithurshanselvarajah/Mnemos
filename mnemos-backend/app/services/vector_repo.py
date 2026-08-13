@@ -147,6 +147,21 @@ def delete_for_person_model(person_id: UUID, model_name: str) -> None:
         c.commit()
 
 
+def delete_for_person(person_id: UUID) -> None:
+    """Delete every face_embeddings row for a person across all models.
+
+    Use this when the person record itself is being removed, so that no
+    embeddings (averaged or per-crop) are left orphaned in pgvector for
+    models that may not have been known at the call site.
+    """
+    with get_conn() as c, c.cursor() as cur:
+        cur.execute(
+            "DELETE FROM face_embeddings WHERE person_id = %s",
+            (str(person_id),),
+        )
+        c.commit()
+
+
 def delete_all() -> None:
     with get_conn() as c, c.cursor() as cur:
         cur.execute("DELETE FROM face_embeddings")

@@ -181,6 +181,7 @@ class FakeVectorRepo:
         self.ping_returns: bool = True
         self.search_results: list[list[dict]] = []
         self.search_call_index: int = 0
+        self.deleted_for_person: list[str] = []
 
     def reset(self) -> None:
         self.embeddings.clear()
@@ -192,6 +193,7 @@ class FakeVectorRepo:
         self.ping_returns = True
         self.search_results.clear()
         self.search_call_index = 0
+        self.deleted_for_person.clear()
 
     def install(self) -> dict[str, Any]:
         repo = self
@@ -248,6 +250,10 @@ class FakeVectorRepo:
                 if not (e["person_id"] == str(person_id) and e["model_name"] == model_name)
             ]
 
+        def delete_for_person(person_id):
+            repo.deleted_for_person.append(str(person_id))
+            repo.embeddings = [e for e in repo.embeddings if e["person_id"] != str(person_id)]
+
         def delete_all():
             repo.delete_all_calls += 1
             repo.embeddings.clear()
@@ -285,6 +291,7 @@ class FakeVectorRepo:
             "insert_embedding": insert_embedding,
             "delete_for_crop": delete_for_crop,
             "delete_for_person_model": delete_for_person_model,
+            "delete_for_person": delete_for_person,
             "delete_all": delete_all,
             "upsert_averaged": upsert_averaged,
             "reindex_hnsw": reindex_hnsw,

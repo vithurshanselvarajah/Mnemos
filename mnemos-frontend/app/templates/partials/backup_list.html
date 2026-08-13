@@ -21,8 +21,9 @@
       <th></th>
     </tr>
   </thead>
-  <tbody>
-    {% for f in files %}
+  {% for f in files %}
+  {% set status_id = 'restore-status-' ~ loop.index %}
+  <tbody x-data="{ restoring: false }">
     <tr>
       <td>
         <code>{{ f.filename }}</code>
@@ -35,17 +36,50 @@
       <td class="muted"><small><code>{{ f.sha256[:12] }}…</code></small></td>
       <td style="text-align:right; white-space:nowrap">
         <a class="btn ghost sm" href="/partials/backup/download/{{ f.filename }}">Download</a>
+        <button class="btn ghost sm"
+                type="button"
+                x-show="!restoring"
+                @click="restoring = true">Restore</button>
         <button class="btn ghost sm danger"
+                x-show="!restoring"
                 hx-delete="/partials/backup/{{ f.filename }}"
                 hx-target="#backup-list"
                 hx-swap="outerHTML"
                 hx-confirm="Delete backup {{ f.filename }}?">
           Delete
         </button>
+        <button class="btn ghost sm"
+                type="button"
+                x-show="restoring"
+                @click="restoring = false"
+                x-cloak>Cancel</button>
       </td>
     </tr>
-    {% endfor %}
+    <tr x-show="restoring" x-cloak>
+      <td colspan="5" style="background: var(--bg-sunken)">
+        <form hx-post="/partials/backup/restore"
+              hx-target="#{{ status_id }}"
+              hx-swap="outerHTML"
+              style="display:flex; gap:.75rem; align-items:center; flex-wrap:wrap">
+          <input type="hidden" name="filename" value="{{ f.filename }}" />
+          <input type="hidden" name="target_id" value="{{ status_id }}" />
+          <label class="row" style="gap:.5rem; align-items:center; margin:0; flex:1">
+            <input type="checkbox" name="confirm" required style="width:auto" />
+            <span>
+              Restore <code>{{ f.filename }}</code> — this overwrites the live backend SQLite,
+              crops, and pgvector database. If the backup was taken from a different
+              backend (different master key) the frontend will need to be re-paired
+              (<code>/onboarding/repair</code>) afterwards; if it's the same
+              backend, no re-pair is needed.
+            </span>
+          </label>
+          <button type="submit" class="danger">Confirm restore</button>
+        </form>
+        <div id="{{ status_id }}" style="margin-top: .75rem"></div>
+      </td>
+    </tr>
   </tbody>
+  {% endfor %}
 </table>
 </div>
 {% else %}

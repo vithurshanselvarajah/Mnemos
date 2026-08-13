@@ -11,7 +11,7 @@ from app.api.deps import require_full_admin
 from app.db.session import session_scope
 from app.models.entities import ApiKey, FaceCrop, FaceCropStatus, Person
 from app.schemas.dto import FaceCropOut, PersonCreate, PersonOut, PersonUpdate
-from app.services import vector_repo
+from app.services import vector_repo, websocket_hub
 from app.services.cropper import delete_crop_files
 
 router = APIRouter(prefix="/persons", tags=["persons"])
@@ -163,10 +163,18 @@ def delete_person(person_id: uuid.UUID, _: ApiKey = Depends(require_full_admin))
             c.status = FaceCropStatus.UNASSIGNED.value
         s.delete(p)
     try:
-        for model_name in ("buffalo_s", "buffalo_l"):
-            vector_repo.delete_for_person_model(person_id, model_name)
-    except Exception:
-        pass
+        vector_repo.delete_for_person(person_id)
+    except Exception as e:
+        log.warning("vector cleanup failed for deleted person %s: %s", person_id, e)
+    try:
+        websocket_hub.publish(
+            {
+                "type": "person.deleted",
+                "person_id": str(person_id),
+            }
+        )
+    except Exception as e:
+        log.warning("websocket publish failed for person.delete: %s", e)
     return {"ok": True}
 
 

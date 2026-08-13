@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, Response
@@ -227,11 +228,12 @@ async def partial_backup_restore(request: Request):
                 status=job.get("status", BackupJobStatus.RUNNING.value),
             )
         )
+    target_id = (form.get("target_id") or "restore-status").strip()
     return render(
         templates,
         request,
         "partials/backup_restore_status.html",
-        {"job": job, "filename": filename},
+        {"job": job, "filename": filename, "target_id": target_id},
     )
 
 
@@ -263,13 +265,62 @@ def partial_backup_restore_status(job_id: str, request: Request):
         row = s.get(BackupJob, job_id)
         if row is not None:
             row.status = job.get("status", row.status)
-            row.finished_at = job.get("finished_at")
+            finished = job.get("finished_at")
+            if finished is not None and not isinstance(finished, datetime):
+                try:
+                    row.finished_at = datetime.fromtimestamp(float(finished))
+                except (TypeError, ValueError):
+                    row.finished_at = None
+            else:
+                row.finished_at = finished
             row.error = job.get("error")
+    target_id = (request.query_params.get("target_id") or "restore-status").strip()
     return render(
         templates,
         request,
         "partials/backup_restore_status.html",
-        {"job": job, "filename": filename},
+        {"job": job, "filename": filename, "target_id": target_id},
+    )
+
+
+@router.get("/restore-verify/{job_id}", response_class=HTMLResponse)
+def partial_backup_restore_verify(job_id: str, request: Request):
+    require_admin(request)
+    target_id = (request.query_params.get("target_id") or "restore-status").strip()
+    try:
+        r = backup_list()
+    except Exception:
+        log.exception("backup restore-verify failed for %s", job_id)
+        return _render_repair_required(target_id)
+    if r.status_code == 200:
+        return _render_restore_ok(target_id)
+    if r.status_code in (401, 403):
+        return _render_repair_required(target_id)
+    log.warning("backup restore-verify unexpected status %s for %s", r.status_code, job_id)
+    return _render_repair_required(target_id)
+
+
+def _render_restore_ok(target_id: str) -> HTMLResponse:
+    return HTMLResponse(
+        f"<div id='{target_id}'><div class='alert ok'>"
+        "<strong>Restore complete and pairing still valid.</strong> "
+        "The model is reloading — give it a few seconds, then refresh the page."
+        "<p style='margin-top:.5rem'>"
+        "<a class='btn ghost sm' href='/dashboard'>Back to dashboard</a>"
+        "</p></div></div>"
+    )
+
+
+def _render_repair_required(target_id: str) -> HTMLResponse:
+    return HTMLResponse(
+        f"<div id='{target_id}'><div class='alert warn'>"
+        "<strong>Restore complete, but the stored API key no longer works.</strong> "
+        "The backend's master key was replaced with a different one from the backup. "
+        "You'll need to re-pair with the backend before you can do anything else."
+        "<p style='margin-top:.5rem'>"
+        "<a class='btn primary' href='/onboarding/repair'>Re-pair now</a>"
+        "<a class='btn ghost sm' href='/dashboard' style='margin-left:.5rem'>Back to dashboard</a>"
+        "</p></div></div>"
     )
 
 

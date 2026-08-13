@@ -380,3 +380,101 @@ def test_restore_job_rejects_concurrent(backend_env_for_backup, mock_pg, monkeyp
             backup_mod.start_restore_job(out.name, backend_db_dest=backend_db, crops_dir_dest=crops_dir)
     finally:
         job._thread.join(timeout=10)
+
+
+def test_atomic_replace_falls_back_on_cross_device(
+    backend_imports, tmp_path, monkeypatch
+):
+    import errno as _errno
+    from app import backup as backup_mod
+
+    src = tmp_path / "src.bin"
+    src.write_bytes(b"hello")
+    dest = tmp_path / "subdir" / "dest.bin"
+    call_count = {"n": 0}
+
+    def fake_replace(s, d):
+        call_count["n"] += 1
+        raise OSError(_errno.EXDEV, "Invalid cross-device link")
+
+    monkeypatch.setattr(backup_mod.os, "replace", fake_replace)
+    backup_mod._atomic_replace(src, dest)
+    assert call_count["n"] == 1
+    assert dest.exists()
+    assert dest.read_bytes() == b"hello"
+    assert not src.exists()
+
+
+def test_atomic_replace_propagates_unrelated_oserror(
+    backend_imports, tmp_path, monkeypatch
+):
+    import errno as _errno
+    from app import backup as backup_mod
+
+    src = tmp_path / "src.bin"
+    src.write_bytes(b"hello")
+    dest = tmp_path / "dest.bin"
+
+    def fake_replace(s, d):
+        raise OSError(_errno.EACCES, "Permission denied")
+
+    monkeypatch.setattr(backup_mod.os, "replace", fake_replace)
+    with pytest.raises(OSError):
+        backup_mod._atomic_replace(src, dest)
+
+
+def test_strip_user_management_removes_role_ddl(
+    backend_imports,
+):
+    from app import backup as backup_mod
+
+    sql = (
+        "CREATE TABLE foo (id int);\n"
+        "CREATE ROLE mnemos;\n"
+        "ALTER ROLE mnemos WITH SUPERUSER;\n"
+        "DROP ROLE mnemos;\n"
+        "CREATE TABLE bar (id int);\n"
+        "ALTER ROLE mnemos WITH LOGIN;\n"
+    )
+    out = backup_mod._strip_user_management(sql)
+    assert "ROLE" not in out
+    assert "CREATE TABLE foo" in out
+    assert "CREATE TABLE bar" in out
+
+
+def test_strip_user_management_handles_multiline_statements(
+    backend_imports,
+):
+    from app import backup as backup_mod
+
+    sql = (
+        "CREATE TABLE foo (id int);\n"
+        "CREATE ROLE mnemos WITH\n"
+        "  SUPERUSER\n"
+        "  LOGIN;\n"
+        "CREATE TABLE bar (id int);\n"
+    )
+    out = backup_mod._strip_user_management(sql)
+    assert "ROLE" not in out
+    assert "CREATE TABLE foo" in out
+    assert "CREATE TABLE bar" in out
+
+
+def test_strip_user_management_removes_database_and_meta_commands(
+    backend_imports,
+):
+    from app import backup as backup_mod
+
+    sql = (
+        "\\restrict abc123\n"
+        "CREATE DATABASE mnemos_vectors WITH TEMPLATE = template1;\n"
+        "ALTER DATABASE mnemos_vectors OWNER TO mnemos;\n"
+        "DROP DATABASE old_db;\n"
+        "\\unrestrict\n"
+        "CREATE TABLE foo (id int);\n"
+    )
+    out = backup_mod._strip_user_management(sql)
+    assert "DATABASE" not in out
+    assert "\\restrict" not in out
+    assert "\\unrestrict" not in out
+    assert "CREATE TABLE foo" in out

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import logging
@@ -209,12 +210,34 @@ def _pg_dumpall(dest_sql: Path) -> None:
     dest_sql.parent.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
     env.setdefault("PGCONNECT_TIMEOUT", "10")
+    # pg_dumpall (perl wrapper) shells out to per-database pg_dump calls
+    # that do not inherit the DSN, so the password is lost. Set PGPASSWORD
+    # explicitly so the inner pg_dump invocations can authenticate.
+    pg_password = _extract_pg_password(dsn)
+    if pg_password:
+        env["PGPASSWORD"] = pg_password
     r = subprocess.run(
         ["pg_dumpall", "-d", dsn, "--no-role-passwords"], capture_output=True, text=True, env=env
     )
     if r.returncode != 0:
         raise RuntimeError(f"pg_dumpall failed: {r.stderr.strip()}")
     dest_sql.write_text(r.stdout, encoding="utf-8")
+
+
+def _extract_pg_password(dsn: str) -> str | None:
+    from urllib.parse import unquote, urlparse, parse_qs
+
+    try:
+        parsed = urlparse(dsn)
+    except ValueError:
+        return None
+    if parsed.password:
+        return unquote(parsed.password)
+    if parsed.query:
+        qs = parse_qs(parsed.query)
+        if "password" in qs and qs["password"]:
+            return qs["password"][0]
+    return None
 
 
 def _tar_dir(src_dir: Path) -> bytes:
@@ -355,9 +378,25 @@ def _pg_restore(pg_sql_text: str) -> None:
     )
     env = os.environ.copy()
     env.setdefault("PGCONNECT_TIMEOUT", "10")
+    schema_reset = (
+        "DROP SCHEMA IF EXISTS public CASCADE;\n"
+        "CREATE SCHEMA public;\n"
+        "GRANT ALL ON SCHEMA public TO mnemos;\n"
+        "GRANT ALL ON SCHEMA public TO public;\n"
+    )
+    r = subprocess.run(
+        ["psql", "-d", dsn, "-v", "ON_ERROR_STOP=0", "-q"],
+        input=schema_reset,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    if r.returncode != 0:
+        raise RuntimeError(f"psql schema reset failed: {r.stderr.strip()}")
+    filtered = _strip_user_management(pg_sql_text)
     r = subprocess.run(
         ["psql", "-d", dsn, "-v", "ON_ERROR_STOP=1", "-q"],
-        input=pg_sql_text,
+        input=filtered,
         capture_output=True,
         text=True,
         env=env,
@@ -366,11 +405,51 @@ def _pg_restore(pg_sql_text: str) -> None:
         raise RuntimeError(f"psql restore failed: {r.stderr.strip()}")
 
 
+def _strip_user_management(sql_text: str) -> str:
+    """Drop role and database DDL from a pg_dumpall output.
+
+    The pgvector user/database is provisioned by docker-compose and is
+    the same one we connect as, so the dump's CREATE ROLE / ALTER ROLE /
+    DROP ROLE / CREATE DATABASE statements are noise that conflict with
+    the live state. We also strip pg_dumpall's \\restrict / \\unrestrict
+    meta-commands since we feed the SQL through psql directly.
+    """
+    out: list[str] = []
+    in_skip_stmt = False
+    skip_kinds = (
+        "CREATE ROLE",
+        "ALTER ROLE",
+        "DROP ROLE",
+        "CREATE DATABASE",
+        "ALTER DATABASE",
+        "DROP DATABASE",
+    )
+    for raw in sql_text.splitlines():
+        stripped = raw.lstrip()
+        upper = stripped.upper()
+        if not in_skip_stmt:
+            if any(upper.startswith(k) for k in skip_kinds):
+                in_skip_stmt = not raw.rstrip().endswith(";")
+                continue
+            if stripped.startswith("\\restrict") or stripped.startswith("\\unrestrict"):
+                continue
+            out.append(raw)
+        else:
+            if raw.rstrip().endswith(";"):
+                in_skip_stmt = False
+    return "\n".join(out) + "\n"
+
+
 def _atomic_replace(src: Path, dest: Path) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists():
         dest.unlink()
-    os.replace(src, dest)
+    try:
+        os.replace(src, dest)
+    except OSError as e:
+        if e.errno != errno.EXDEV:
+            raise
+        shutil.move(str(src), str(dest))
 
 
 def _replace_crops_from_tar(crops_tar_bytes: bytes, dest_dir: Path) -> None:

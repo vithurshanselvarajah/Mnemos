@@ -126,6 +126,52 @@ def test_delete_person(api_client, unique_name):
     assert all(p["id"] != created["id"] for p in listing)
 
 
+def test_delete_person_clears_embeddings_for_every_model(
+    api_client, unique_name, fake_vector_repo
+):
+    client, key = api_client
+    created = client.post(
+        "/api/v1/persons",
+        json={"name": unique_name},
+        headers={"X-API-Key": key},
+    ).json()
+    pid = created["id"]
+    fake_vector_repo.embeddings.extend(
+        [
+            {
+                "embed_id": f"e-{pid}-s",
+                "crop_id": f"crop-{pid}-s",
+                "person_id": pid,
+                "model_name": "buffalo_s",
+                "is_averaged": False,
+            },
+            {
+                "embed_id": f"e-{pid}-m",
+                "crop_id": f"crop-{pid}-m",
+                "person_id": pid,
+                "model_name": "buffalo_m",
+                "is_averaged": False,
+            },
+            {
+                "embed_id": f"e-{pid}-l",
+                "crop_id": f"crop-{pid}-l",
+                "person_id": pid,
+                "model_name": "buffalo_l",
+                "is_averaged": True,
+            },
+        ]
+    )
+    r = client.delete(f"/api/v1/persons/{pid}", headers={"X-API-Key": key})
+    assert r.status_code == 200
+    assert pid in fake_vector_repo.deleted_for_person
+    remaining = [e for e in fake_vector_repo.embeddings if e["person_id"] == pid]
+    assert remaining == []
+    assert all(
+        (pid, "buffalo_s") not in fake_vector_repo.deleted_for_person_model
+        for _ in [None]
+    )
+
+
 def test_get_unknown_person_returns_404(api_client):
     from uuid import uuid4
 

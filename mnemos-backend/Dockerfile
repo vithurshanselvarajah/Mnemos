@@ -60,7 +60,22 @@ RUN apt-get update \
         curl \
         ca-certificates \
         sqlite3 \
-        postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install the PG18 PostgreSQL client (pg_dumpall, psql) from the official
+# PGDG apt repository so it matches the major version of the pgvector
+# server (pgvector/pgvector:pg18) used in docker-compose. Debian's
+# stock postgresql-client is on PG17 and refuses to dump a PG18 server
+# ("aborting because of server version mismatch").
+ARG PGDG_UBUNTU_CODENAME=resolute
+RUN install -d /usr/share/postgresql-common/pgdg \
+    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+        -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+    && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${PGDG_UBUNTU_CODENAME}-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client-18 \
+    && apt-get purge -y --auto-remove curl \
     && rm -rf /var/lib/apt/lists/*
 
 RUN python3.14 -m venv /opt/venv
@@ -92,7 +107,22 @@ RUN apt-get update \
         curl \
         ca-certificates \
         sqlite3 \
-        postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install the PG18 PostgreSQL client (pg_dumpall, psql) from the official
+# PGDG apt repository so it matches the major version of the pgvector
+# server (pgvector/pgvector:pg18) used in docker-compose. Debian's
+# stock postgresql-client is on PG17 and refuses to dump a PG18 server
+# ("aborting because of server version mismatch").
+ARG PGDG_DEBIAN_CODENAME=trixie
+RUN install -d /usr/share/postgresql-common/pgdg \
+    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+        -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+    && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${PGDG_DEBIAN_CODENAME}-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client-18 \
+    && apt-get purge -y --auto-remove curl \
     && rm -rf /var/lib/apt/lists/*
 
 

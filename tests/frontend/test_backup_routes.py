@@ -209,6 +209,58 @@ def test_backup_restore_handles_409(admin_with_backend, monkeypatch):
     assert r.status_code == 409
 
 
+def test_restore_verify_reports_ok_when_stored_key_still_works(
+    admin_with_backend, monkeypatch
+):
+    _app, tc, *_ = admin_with_backend
+    monkeypatch.setattr(
+        "app.api.partials_backup.backup_list",
+        lambda: mock.Mock(status_code=200, json=lambda: {"backups": []}),
+    )
+    r = tc.get(
+        "/partials/backup/restore-verify/abc123?target_id=restore-status-2",
+        headers={"Accept": "text/html"},
+    )
+    assert r.status_code == 200
+    assert "pairing still valid" in r.text
+    assert "Re-pair" not in r.text
+    assert "id=\"restore-status-2\"" in r.text or "id='restore-status-2'" in r.text
+
+
+def test_restore_verify_reports_repair_needed_on_401(
+    admin_with_backend, monkeypatch
+):
+    _app, tc, *_ = admin_with_backend
+    monkeypatch.setattr(
+        "app.api.partials_backup.backup_list",
+        lambda: mock.Mock(status_code=401, text="unauth"),
+    )
+    r = tc.get(
+        "/partials/backup/restore-verify/abc123?target_id=restore-status-2",
+        headers={"Accept": "text/html"},
+    )
+    assert r.status_code == 200
+    assert "no longer works" in r.text
+    assert "Re-pair now" in r.text
+
+
+def test_restore_verify_reports_repair_needed_when_backend_unreachable(
+    admin_with_backend, monkeypatch
+):
+    _app, tc, *_ = admin_with_backend
+
+    def boom():
+        raise RuntimeError("connection refused")
+
+    monkeypatch.setattr("app.api.partials_backup.backup_list", boom)
+    r = tc.get(
+        "/partials/backup/restore-verify/abc123?target_id=restore-status-2",
+        headers={"Accept": "text/html"},
+    )
+    assert r.status_code == 200
+    assert "no longer works" in r.text
+
+
 def test_backup_upload_stores_file_and_inserts_row(admin_with_backend):
     _app, tc, _tmp, _db, bk = admin_with_backend
     content = b"fake tarball"
@@ -307,6 +359,30 @@ def test_backup_page_renders_for_admin(admin_with_backend):
     assert r.status_code == 200
     assert "Backup" in r.text
     assert "/partials/backup/list" in r.text
-    assert "/partials/backup/restore" in r.text
     assert "/partials/backup/upload" in r.text
     assert "/partials/backup/settings" in r.text
+
+
+def test_backup_list_renders_per_row_restore_form(admin_with_backend, monkeypatch):
+    _app, tc, *_ = admin_with_backend
+    monkeypatch.setattr(
+        "app.api.partials_backup.backup_list",
+        lambda: mock.Mock(
+            status_code=200,
+            json=lambda: {
+                "backups": [
+                    {
+                        "filename": "mnemos-backup-20260101-000000.tar.gz",
+                        "size_bytes": 1024,
+                        "created_at": "2026-01-01T00:00:00Z",
+                        "sha256": "abcd" * 16,
+                    }
+                ]
+            },
+        ),
+    )
+    r = tc.get("/partials/backup/list", headers={"Accept": "text/html"})
+    assert r.status_code == 200
+    assert "/partials/backup/restore" in r.text
+    assert 'name="target_id"' in r.text
+    assert "Confirm restore" in r.text

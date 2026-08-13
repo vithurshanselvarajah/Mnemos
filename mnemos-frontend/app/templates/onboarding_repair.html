@@ -54,7 +54,7 @@
   {% if warmup.running or warmup.done %}
   <div class="hint" style="margin-top: 1rem">
     {% if warmup.running %}
-      <span class="htmx-indicator" style="display: inline-flex"></span>
+      <span class="htmx-indicator"></span>
       Model warm-up in progress…
     {% elif warmup.error %}
       <span class="status error">Warm-up error</span> {{ warmup.error }}

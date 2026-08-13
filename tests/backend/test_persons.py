@@ -126,9 +126,7 @@ def test_delete_person(api_client, unique_name):
     assert all(p["id"] != created["id"] for p in listing)
 
 
-def test_delete_person_clears_embeddings_for_every_model(
-    api_client, unique_name, fake_vector_repo
-):
+def test_delete_person_clears_embeddings_for_every_model(api_client, unique_name, fake_vector_repo):
     client, key = api_client
     created = client.post(
         "/api/v1/persons",
@@ -166,10 +164,7 @@ def test_delete_person_clears_embeddings_for_every_model(
     assert pid in fake_vector_repo.deleted_for_person
     remaining = [e for e in fake_vector_repo.embeddings if e["person_id"] == pid]
     assert remaining == []
-    assert all(
-        (pid, "buffalo_s") not in fake_vector_repo.deleted_for_person_model
-        for _ in [None]
-    )
+    assert all((pid, "buffalo_s") not in fake_vector_repo.deleted_for_person_model for _ in [None])
 
 
 def test_get_unknown_person_returns_404(api_client):

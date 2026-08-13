@@ -118,7 +118,7 @@ def _find_backup(name: str) -> Path | None:
         for entry in base.iterdir():
             if entry.name == name and entry.is_file():
                 return entry
-    except (FileNotFoundError, OSError):
+    except FileNotFoundError, OSError:
         return None
     return None
 
@@ -128,10 +128,7 @@ def _reserved_upload_path(name: str) -> Path:
         raise ValueError(f"invalid backup filename: {name!r}")
     base_real = os.path.realpath(str(backup_dir()))
     candidate_real = os.path.realpath(os.path.join(base_real, name))
-    if (
-        candidate_real != base_real
-        and not candidate_real.startswith(base_real + os.sep)
-    ):
+    if candidate_real != base_real and not candidate_real.startswith(base_real + os.sep):
         raise ValueError(f"backup path escapes backup dir: {name!r}")
     return Path(candidate_real)
 
@@ -225,7 +222,7 @@ def _pg_dumpall(dest_sql: Path) -> None:
 
 
 def _extract_pg_password(dsn: str) -> str | None:
-    from urllib.parse import unquote, urlparse, parse_qs
+    from urllib.parse import parse_qs, unquote, urlparse
 
     try:
         parsed = urlparse(dsn)
@@ -235,7 +232,7 @@ def _extract_pg_password(dsn: str) -> str | None:
         return unquote(parsed.password)
     if parsed.query:
         qs = parse_qs(parsed.query)
-        if "password" in qs and qs["password"]:
+        if qs.get("password"):
             return qs["password"][0]
     return None
 
@@ -431,7 +428,7 @@ def _strip_user_management(sql_text: str) -> str:
             if any(upper.startswith(k) for k in skip_kinds):
                 in_skip_stmt = not raw.rstrip().endswith(";")
                 continue
-            if stripped.startswith("\\restrict") or stripped.startswith("\\unrestrict"):
+            if stripped.startswith(("\\restrict", "\\unrestrict")):
                 continue
             out.append(raw)
         else:

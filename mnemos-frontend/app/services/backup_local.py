@@ -127,7 +127,7 @@ def find_local_backup(name: str) -> Path | None:
         for entry in base.iterdir():
             if entry.name == name and entry.is_file():
                 return entry
-    except (FileNotFoundError, OSError):
+    except FileNotFoundError, OSError:
         return None
     return None
 
@@ -137,10 +137,7 @@ def reserve_upload_path(name: str) -> Path:
         raise ValueError(f"invalid backup filename: {name!r}")
     base_real = os.path.realpath(str(backup_dir()))
     candidate_real = os.path.realpath(os.path.join(base_real, name))
-    if (
-        candidate_real != base_real
-        and not candidate_real.startswith(base_real + os.sep)
-    ):
+    if candidate_real != base_real and not candidate_real.startswith(base_real + os.sep):
         raise ValueError(f"backup path escapes backup dir: {name!r}")
     return Path(candidate_real)
 

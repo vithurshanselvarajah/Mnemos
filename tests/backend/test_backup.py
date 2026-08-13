@@ -141,9 +141,7 @@ def test_safe_filename_rejects_path_traversal(backend_imports):
     )
 
 
-def test_find_backup_returns_existing_path_or_none(
-    backend_imports, tmp_path, monkeypatch
-):
+def test_find_backup_returns_existing_path_or_none(backend_imports, tmp_path, monkeypatch):
     from app import backup as backup_mod
 
     monkeypatch.setenv("MNEMOS_BACKUP_DIR", str(tmp_path / "backups"))
@@ -151,9 +149,7 @@ def test_find_backup_returns_existing_path_or_none(
     base.mkdir(parents=True, exist_ok=True)
 
     # No entry yet -> None
-    assert (
-        backup_mod._find_backup("mnemos-backup-20260101-000000.tar.gz") is None
-    )
+    assert backup_mod._find_backup("mnemos-backup-20260101-000000.tar.gz") is None
 
     # Existing entry -> Path that is exactly the iterdir() entry.
     good = base / "mnemos-backup-20260101-000000.tar.gz"
@@ -168,9 +164,7 @@ def test_find_backup_returns_existing_path_or_none(
         assert backup_mod._find_backup(bad) is None
 
 
-def test_reserved_upload_path_rejects_escape(
-    backend_imports, tmp_path, monkeypatch
-):
+def test_reserved_upload_path_rejects_escape(backend_imports, tmp_path, monkeypatch):
     from app import backup as backup_mod
 
     monkeypatch.setenv("MNEMOS_BACKUP_DIR", str(tmp_path / "backups"))
@@ -178,9 +172,7 @@ def test_reserved_upload_path_rejects_escape(
     base.mkdir(parents=True, exist_ok=True)
 
     # Well-formed name -> Path inside the backup dir.
-    dest = backup_mod._reserved_upload_path(
-        "mnemos-backup-20260101-000000.tar.gz"
-    )
+    dest = backup_mod._reserved_upload_path("mnemos-backup-20260101-000000.tar.gz")
     assert dest == (base / "mnemos-backup-20260101-000000.tar.gz").resolve()
     assert str(dest).startswith(str(base.resolve()))
 
@@ -382,10 +374,9 @@ def test_restore_job_rejects_concurrent(backend_env_for_backup, mock_pg, monkeyp
         job._thread.join(timeout=10)
 
 
-def test_atomic_replace_falls_back_on_cross_device(
-    backend_imports, tmp_path, monkeypatch
-):
+def test_atomic_replace_falls_back_on_cross_device(backend_imports, tmp_path, monkeypatch):
     import errno as _errno
+
     from app import backup as backup_mod
 
     src = tmp_path / "src.bin"
@@ -405,10 +396,9 @@ def test_atomic_replace_falls_back_on_cross_device(
     assert not src.exists()
 
 
-def test_atomic_replace_propagates_unrelated_oserror(
-    backend_imports, tmp_path, monkeypatch
-):
+def test_atomic_replace_propagates_unrelated_oserror(backend_imports, tmp_path, monkeypatch):
     import errno as _errno
+
     from app import backup as backup_mod
 
     src = tmp_path / "src.bin"

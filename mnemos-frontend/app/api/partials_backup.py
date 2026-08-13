@@ -269,7 +269,7 @@ def partial_backup_restore_status(job_id: str, request: Request):
             if finished is not None and not isinstance(finished, datetime):
                 try:
                     row.finished_at = datetime.fromtimestamp(float(finished))
-                except (TypeError, ValueError):
+                except TypeError, ValueError:
                     row.finished_at = None
             else:
                 row.finished_at = finished

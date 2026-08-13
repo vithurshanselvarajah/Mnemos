@@ -209,9 +209,7 @@ def test_backup_restore_handles_409(admin_with_backend, monkeypatch):
     assert r.status_code == 409
 
 
-def test_restore_verify_reports_ok_when_stored_key_still_works(
-    admin_with_backend, monkeypatch
-):
+def test_restore_verify_reports_ok_when_stored_key_still_works(admin_with_backend, monkeypatch):
     _app, tc, *_ = admin_with_backend
     monkeypatch.setattr(
         "app.api.partials_backup.backup_list",
@@ -224,12 +222,10 @@ def test_restore_verify_reports_ok_when_stored_key_still_works(
     assert r.status_code == 200
     assert "pairing still valid" in r.text
     assert "Re-pair" not in r.text
-    assert "id=\"restore-status-2\"" in r.text or "id='restore-status-2'" in r.text
+    assert 'id="restore-status-2"' in r.text or "id='restore-status-2'" in r.text
 
 
-def test_restore_verify_reports_repair_needed_on_401(
-    admin_with_backend, monkeypatch
-):
+def test_restore_verify_reports_repair_needed_on_401(admin_with_backend, monkeypatch):
     _app, tc, *_ = admin_with_backend
     monkeypatch.setattr(
         "app.api.partials_backup.backup_list",
@@ -244,9 +240,7 @@ def test_restore_verify_reports_repair_needed_on_401(
     assert "Re-pair now" in r.text
 
 
-def test_restore_verify_reports_repair_needed_when_backend_unreachable(
-    admin_with_backend, monkeypatch
-):
+def test_restore_verify_reports_repair_needed_when_backend_unreachable(admin_with_backend, monkeypatch):
     _app, tc, *_ = admin_with_backend
 
     def boom():

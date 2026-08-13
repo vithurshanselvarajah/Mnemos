@@ -5,6 +5,7 @@ Mnemos is fully self-hosted. There is no cloud service, no remote state. The rec
 - [Using the UI](#using-the-ui)
 - [What's in a backup](#whats-in-a-backup)
 - [What NOT to back up](#what-not-to-back-up)
+- [Restore flow & re-pairing](#restore-flow--re-pairing)
 - [Auto-backup scheduler](#auto-backup-scheduler)
 - [Backup & restore API](#backup--restore-api)
 - [CLI: `python -m app.cli backup …`](#cli-python--m-appcli-backup-)
@@ -23,7 +24,7 @@ Open **Settings → Backup & restore** (Admin menu → Backup & restore). From t
 | **Download** | Streams the `.tar.gz` with a stable filename and an `X-Backup-SHA256` header. |
 | **Delete** | Removes the backup file from disk. |
 | **Upload** | Brings an existing `.tar.gz` back into the manager so it can be restored. |
-| **Restore** | Two-step form: pick a filename, tick the confirmation box, submit. Runs as a background job that the UI polls. The model re-warms automatically when the restore completes. |
+| **Restore (per row)** | Each backup in the list has its own inline confirm form. Submitting starts a background restore and polls the status into the same row. When the restore finishes the UI runs an automatic **pairing check** — if the stored API key still works against the restored backend, you stay signed in; if the backend's master key is different (for example the backup came from a different installation) the UI sends you back through the pairing flow. |
 | **Auto-backup schedule** | Daily or weekly cadence, retention count, and the hour (UTC) the scheduler runs at. Backed by a row in the frontend SQLite. |
 
 ### Where backups live
@@ -59,6 +60,23 @@ The manifest is the source of truth for the restorer's integrity checks. Every r
 
 ---
 
+## Restore flow & re-pairing
+
+A restore is destructive: it overwrites the backend SQLite, replaces the crop directory, drops and recreates the `public` schema in pgvector, and (optionally) replaces the frontend SQLite. Because the backend's master key is derived from the values in `.env` at first run, restoring a backup on a host with a different `.env` produces a backend whose master key no longer matches the one the frontend encrypted its API key against.
+
+The UI handles this with a **conditional re-pair check**:
+
+1. The restore job runs to completion on the backend (`status: done`).
+2. The UI automatically issues `GET /api/v1/backup` against the freshly-restored backend using the locally-stored API key — a lightweight, idempotent read.
+3. **If the request succeeds (200)** the pairing is still valid, the model re-warms in the background, and the UI shows "Restore complete and pairing still valid." No re-pairing required.
+4. **If the request returns 401/403 (or the backend is unreachable)** the UI shows the re-pairing screen and walks you through `/api/v1/system/pair` with the master key from `.env`. The previous API key is discarded.
+
+When you restore on the same host with the same `.env` (the common case) the pairing check succeeds and you stay logged in. When you restore across hosts or after rotating `.env`, expect the re-pairing step.
+
+> The bundling/restore logic never touches `.env` or any secret store directly. If you want a guaranteed-clean restore, treat `.env` as a separate artifact and place it on disk before launching the stack.
+
+---
+
 ## Auto-backup scheduler
 
 Stored in the `backup_settings` table in the frontend SQLite. One row total. Fields:
@@ -69,7 +87,9 @@ Stored in the `backup_settings` table in the frontend SQLite. One row total. Fie
 | `cadence` | str | `daily` | `daily` or `weekly` |
 | `hour_utc` | int | 3 | 0–23, when the scheduler runs |
 | `weekday_utc` | int | 0 | 0=Mon … 6=Sun, used only when `cadence=weekly` |
-| `retention_count` | int | 7 | keep the N most recent; older backups are deleted |
+| `retention_count` | int | 7 | keep the N most recent (1–365); older backups are deleted |
+| `next_run_at` | datetime | None | Set by the scheduler when it computes the next due time |
+| `updated_at` | datetime | now | Refreshed on every settings PUT |
 
 The scheduler runs in the frontend's FastAPI lifespan. It wakes up at most every 60 seconds, checks the schedule, and asks the backend to create a backup when due. After each create, the most recent `retention_count` backups are kept on both the backend (`/data/backups`) and the local frontend cache.
 
@@ -160,6 +180,6 @@ docker compose up -d
 2. Copy the tarball + `.env` to the new host.
 3. Install Docker, follow [Quick Start](Quick-Start.md) but **don't** run `up -d` yet.
 4. Place `.env` in the install dir, then drop the tarball into `mnemos/backend/backups/`.
-5. From the UI, restore the backup. The new host takes over with the same admin users, the same known people, and the same embeddings. No re-pairing.
+5. From the UI, restore the backup. The new host takes over with the same admin users, the same known people, and the same embeddings.
 
-> The bundled frontend SQLite contains the encrypted API key for the backend. Restoring the backend SQLite **and** the frontend SQLite together preserves the pairing; restoring only the backend SQLite will require re-pairing.
+Because the master key is derived from `.env` on first run, moving the backup to a host with an identical `.env` keeps the pairing intact and the UI shows "Restore complete and pairing still valid." If `.env` differs (or only the backend SQLite was restored without the bundled frontend SQLite), the UI detects the 401 from the pairing check and routes you through the re-pairing flow automatically — see [Restore flow & re-pairing](#restore-flow--re-pairing).

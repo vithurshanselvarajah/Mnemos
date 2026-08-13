@@ -35,7 +35,9 @@ All are prefixed `MNEMOS_`. Defaults are shown — only override if you have a r
 | `MNEMOS_DB_PATH` | `/data/backend.db` | SQLite file for persons, crops, API keys, master key, reindex state. |
 | `MNEMOS_CROPS_DIR` | `/data/crops` | Directory where cropped face JPEGs are stored. |
 | `MNEMOS_BACKUP_DIR` | `/data/backups` | Where generated `.tar.gz` backups are stored. Created on first use. |
-| `MNEMOS_VECTOR_DSN` | `postgresql://mnemos:mnemos@localhost:5432/mnemos_vectors` | pgvector DSN. The compose file injects the password from `MNEMOS_PG_PASSWORD`. |
+| `MNEMOS_VECTOR_DSN` | `postgresql://mnemos:mnemos@localhost:5432/mnemos_vectors` | pgvector DSN. The compose file injects the password from `MNEMOS_PG_PASSWORD`. The password is also exported as `PGPASSWORD` for the `pg_dumpall` / `psql` subprocesses used by backup and restore — see [Backup & Restore](Backup-Restore.md). |
+
+> The backend image ships `postgresql-client-18` from the PGDG apt repo (`trixie` on Debian, `resolute` on Ubuntu). Both client and server are pinned to PostgreSQL 18 so that `pg_dumpall` never warns about a server-version mismatch when the dump is replayed into the bundled `pgvector/pgvector:pg18` image.
 
 ### Inference
 

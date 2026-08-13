@@ -106,6 +106,16 @@ Same event names as warmup, with `reindex.` instead of `warmup.`, plus:
   { "type": "reindex.error", "model": "buffalo_l", "error": "OSError: disk full" }
   ```
 
+### Persons
+
+- **`person.deleted`** — fired after `DELETE /api/v1/persons/{id}` completes successfully. The server has already removed the person's row, nulled out every assigned `FaceCrop.person_id`, and deleted all embedding rows for every active vector model before the event is published.
+
+  ```json
+  { "type": "person.deleted", "person_id": "9f1b…" }
+  ```
+
+  Use this to drop the person from an open detail page or invalidate a UI cache. The crop-level effect of the same delete is also visible via `inbox.bulk_changed` (crops are returned to the unknown queue).
+
 ## Heartbeat
 
 Send `ping` as a text message; the server replies `pong`. Use this to detect dead connections from behind NAT or load balancers.

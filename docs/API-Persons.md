@@ -95,7 +95,8 @@ X-API-Key: <Full-Admin>
 Deleting a person:
 
 - Unlinks all of their assigned crops (sets `person_id` to `null`, status back to `UNASSIGNED`). The crop JPEGs are **not** deleted.
-- Removes the person's averaged embedding from pgvector under every model.
+- Deletes every embedding row for this person from `vector_repo.face_embeddings` across **every active model** (not just the currently-loaded one) via `vector_repo.delete_for_person(person_id)`. Subsequent reindexes have no stale rows to pull, and a model switch won't recreate the person from a leftover vector.
+- Emits a `person.deleted` WebSocket event after the cleanup completes (see [API-WebSocket](API-WebSocket.md)).
 
 The crops are returned to the inbox. This is intentional: it lets you re-review them and either reassign to a different person or mark as non-face. There is no "merge two people" endpoint because merges are lossy.
 

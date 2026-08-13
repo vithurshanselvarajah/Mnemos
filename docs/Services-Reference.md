@@ -154,7 +154,11 @@ Thin wrapper over pgvector. All SQL goes through this module.
 
 ### `delete_for_person_model(person_id, model_name)`
 
-- DELETE the row. Called on person-delete and on model switch when the new model is empty for the person.
+- DELETE the row. Called on model switch when the new model is empty for the person.
+
+### `delete_for_person(person_id)`
+
+- DELETE every row in `face_embeddings` with this `person_id`, regardless of `model_name`. Called from `DELETE /api/v1/persons/{id}` after the crops are unlinked; ensures no embedding survives for a model that may not currently be the active one. Cleanup errors are logged but do not fail the delete — the row in `persons` is already gone.
 
 ### `ping() -> bool`
 
@@ -211,10 +215,35 @@ frontend.db     # (optional) sqlite3 .backup output
 | `inspect_backup(filename) -> dict` | Returns the parsed `manifest.json` + the file's sha256 |
 | `delete_backup(filename)` | Removes the file from disk |
 | `start_restore_job(filename, ...) -> RestoreJob` | Spawns a background thread; one job at a time |
+| `_pg_dumpall(dest_sql: Path)` | Runs `pg_dumpall -d <DSN> --no-role-passwords`, exporting `PGPASSWORD` from the DSN so the per-database `pg_dump` children inside the Perl wrapper can authenticate |
+| `_extract_pg_password(dsn: str) -> str \| None` | Pulls the password out of `postgresql://user:pass@host/db` or `?password=` form, URL-decoded |
+| `_pg_restore(pg_sql_text: str)` | Schema reset (`DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT …`) then `psql` with role-stripped SQL |
+| `_strip_user_management(sql_text: str) -> str` | Removes every `CREATE/ALTER/DROP ROLE/DATABASE` statement and the psql `\restrict`/`\unrestrict` meta-commands from the dump |
+| `_atomic_replace(src: Path, dest: Path)` | `os.replace` with a `shutil.move` fallback when `EXDEV` (cross-device link) is raised — see [Atomic replace](#atomic-replace-osreplace-with-exdev-fallback) |
+| `_backup_sqlite(src_db, dest_db)` | Prefers the `sqlite3` CLI's `.backup`; falls back to Python's online backup API |
 
 ### Why `pg_dumpall` and not `pg_basebackup`
 
 `pg_dumpall` produces a plain SQL file. It's portable, easy to verify (`pg.sql` is just text), and small enough to bundle inside a tarball. `pg_basebackup` is faster but produces a binary directory that would not fit cleanly inside our tarball structure. For the home workload the dump speed is irrelevant.
+
+### pgvector dump: setting `PGPASSWORD` explicitly
+
+`pg_dumpall` is a thin Perl wrapper that shells out to per-database `pg_dump` calls. Those inner processes don't inherit the original DSN, so the password would be lost and the dump would fail with `FATAL: no PostgreSQL user name specified`. `_pg_dumpall` parses `MNEMOS_VECTOR_DSN` with `urllib.parse.urlparse` (also tolerating `?password=` query-string form via `parse_qs`), URL-decodes the value, and exports it as `PGPASSWORD` for the subprocess. The backend image is pinned to a PostgreSQL 18 client (`postgresql-client-18`) via the PGDG apt repo so the dump server-version matches the container's `pgvector/pgvector:pg18`.
+
+### pgvector restore: schema reset + role stripping
+
+`_pg_restore` writes a short preamble before the SQL dump:
+
+1. `DROP SCHEMA IF EXISTS public CASCADE;`
+2. `CREATE SCHEMA public;`
+3. `GRANT ALL ON SCHEMA public TO mnemos;`
+4. `GRANT ALL ON SCHEMA public TO public;`
+
+This makes restore idempotent — `pg_dumpall` includes `CREATE TABLE` for everything in the public schema, and without the reset every column would collide with `relation "..." already exists`. The same preamble also strips role management commands so a restore into a fresh container doesn't fail with `role "mnemos" already exists` or refuse to overwrite the existing role: `_strip_user_management` drops every `CREATE ROLE`, `ALTER ROLE`, `DROP ROLE`, `CREATE DATABASE`, `ALTER DATABASE`, and `DROP DATABASE` statement, plus the psql `\restrict`/`\unrestrict` meta-commands that pin dump-set passwords. The fresh container's `pgvector-init/01-extensions.sql` recreates the extension on first start.
+
+### Atomic replace: `os.replace` with `EXDEV` fallback
+
+`_atomic_replace` calls `os.replace(src, dest)` so the swap is a single inode rename and concurrent readers never see a half-written file. `os.replace` raises `OSError(errno=18, "Invalid cross-device link")` (Linux `EXDEV`) when `src` and `dest` live on different filesystems — common when the destination is a bind-mounted volume that doesn't match `/tmp`. The fallback catches `errno 18` only and finishes the swap with `shutil.move` (a copy + unlink in that case). All other errors propagate.
 
 ### Why `sqlite3 .backup` instead of `cp`
 

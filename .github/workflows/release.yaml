@@ -1,4 +1,4 @@
-name: Release All
+name: Release
 
 on:
   workflow_dispatch:
@@ -28,13 +28,14 @@ permissions:
   models: read
 
 jobs:
-  matrix-setup:
-    name: Determine release targets
+  pick-services:
+    name: Pick services to release
     runs-on: ubuntu-latest
     outputs:
       targets: ${{ steps.set-matrix.outputs.targets }}
     steps:
-      - id: set-matrix
+      - name: Set service targets
+        id: set-matrix
         run: |
           if [[ "${{ inputs.target }}" == "both" ]]; then
             echo 'targets=["backend", "frontend"]' >> "$GITHUB_OUTPUT"
@@ -42,15 +43,15 @@ jobs:
             echo "targets=[\"${{ inputs.target }}\"]" >> "$GITHUB_OUTPUT"
           fi
 
-  prepare:
-    name: Prepare (${{ matrix.service }})
-    needs: matrix-setup
+  read-versions:
+    name: Read version (${{ matrix.service }})
+    needs: pick-services
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
     strategy:
       matrix:
-        service: ${{ fromJSON(needs.matrix-setup.outputs.targets) }}
+        service: ${{ fromJSON(needs.pick-services.outputs.targets) }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -74,36 +75,63 @@ jobs:
           echo "Read ${{ matrix.service }} version: $version (tag: $tag)"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-  test:
-    name: Test release candidate
-    needs: matrix-setup
+  test-suite:
+    name: Lint and test release candidate
+    needs: pick-services
     uses: ./.github/workflows/ci.yml
     permissions:
       contents: read
 
-  build-by-arch:
-    name: Build (${{ matrix.service }} / ${{ matrix.platform.arch }})
+  build-images:
+    # Matrix dimensions:
+    #   service  ∈ {backend, frontend}
+    #   provider ∈ {cpu, nvidia, rockchip} for backend; "" for frontend
+    #   arch     ∈ {amd64, arm64}
+    #
+    # Provider/arch constraints (mirrored in the Dockerfile):
+    #   - rockchip requires linux/arm64 (librknnrt.so is aarch64-only)
+    #   - nvidia  requires linux/amd64 (nvidia/cuda base is x86_64)
+    #   - cpu     builds on both arches
+    #   - frontend has no provider axis; provider is forced to "" and
+    #     INSTALL_PROVIDER is not passed
+    name: Build image (${{ matrix.service }}${{ matrix.provider && format(' / {0}', matrix.provider) || '' }} / ${{ matrix.platform.arch }})
     needs:
-      - matrix-setup
-      - prepare
-      - test
+      - pick-services
+      - read-versions
+      - test-suite
     runs-on: ${{ matrix.platform.runner }}
     strategy:
+      fail-fast: false
       matrix:
-        service: ${{ fromJSON(needs.matrix-setup.outputs.targets) }}
-        platform:
-          - arch: amd64
-            runner: ubuntu-latest
-            target: linux/amd64
-          - arch: arm64
-            runner: ubuntu-26.04-arm
-            target: linux/arm64
+        include:
+          # ----- Frontend: no provider -----
+          - service: frontend
+            provider: ""
+            platform: { arch: amd64, runner: ubuntu-latest,    target: linux/amd64 }
+          - service: frontend
+            provider: ""
+            platform: { arch: arm64, runner: ubuntu-26.04-arm,  target: linux/arm64 }
+          # ----- Backend: cpu on both arches -----
+          - service: backend
+            provider: cpu
+            platform: { arch: amd64, runner: ubuntu-latest,    target: linux/amd64 }
+          - service: backend
+            provider: cpu
+            platform: { arch: arm64, runner: ubuntu-26.04-arm,  target: linux/arm64 }
+          # ----- Backend: nvidia on amd64 only -----
+          - service: backend
+            provider: nvidia
+            platform: { arch: amd64, runner: ubuntu-latest,    target: linux/amd64 }
+          # ----- Backend: rockchip on arm64 only -----
+          - service: backend
+            provider: rockchip
+            platform: { arch: arm64, runner: ubuntu-26.04-arm,  target: linux/arm64 }
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Read version for target
+      - name: Read image version
         id: version
         run: |
           set -euo pipefail
@@ -111,7 +139,7 @@ jobs:
             mnemos-${{ matrix.service }}/app/_version.py | head -n1)"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Extract metadata for image
+      - name: Extract image metadata
         id: meta
         uses: docker/metadata-action@v6
         with:
@@ -127,7 +155,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Build and push by digest
+      - name: Build and push image digest
         id: build
         uses: docker/build-push-action@v7
         with:
@@ -135,33 +163,55 @@ jobs:
           file: ./mnemos-${{ matrix.service }}/Dockerfile
           platforms: ${{ matrix.platform.target }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=image,name=ghcr.io/${{ github.repository_owner }}/mnemos-${{ matrix.service }},push-by-digest=true,name-canonical=true,push=true
+          # The per-provider image name is the contract the compose file
+          # consumes (image: .../mnemos-backend:${MNEMOS_TAG}-${MNEMOS_PROVIDER}).
+          # For the frontend (provider="") the name collapses to the
+          # base repository, which is what the compose file expects.
+          outputs: type=image,name=ghcr.io/${{ github.repository_owner }}/mnemos-${{ matrix.service }}${{ matrix.provider && format('-{0}', matrix.provider) || '' }},push-by-digest=true,name-canonical=true,push=true
+          build-args: |
+            ${{ matrix.provider && format('INSTALL_PROVIDER={0}', matrix.provider) || '' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Export digest
+      - name: Persist per-arch digest
         run: |
           mkdir -p /tmp/digests
           digest="${{ steps.build.outputs.digest }}"
           touch "/tmp/digests/${digest#sha256:}"
 
-      - name: Upload digest artifact
+      - name: Upload per-arch digest artifact
         uses: actions/upload-artifact@v7
         with:
-          name: digests-mnemos-${{ matrix.service }}-${{ matrix.platform.arch }}
+          # The provider segment is omitted for the frontend so the
+          # artifact name stays a clean "digests-mnemos-frontend-<arch>".
+          name: digests-mnemos-${{ matrix.service }}${{ matrix.provider && format('-{0}', matrix.provider) || '' }}-${{ matrix.platform.arch }}
           path: /tmp/digests/*
           if-no-files-found: error
           retention-days: 1
 
-  release:
-    name: Publish (${{ matrix.service }})
+  publish-images:
+    # One row per (service, provider). The frontend uses provider=""
+    # so it collapses to a single cell that produces one manifest
+    # list for the frontend repo. The backend fans out to one cell
+    # per (cpu, nvidia, rockchip), matching the tags consumed by
+    # docker-compose.yml: .../mnemos-backend:${MNEMOS_TAG}-${MNEMOS_PROVIDER}.
+    name: Publish image (${{ matrix.service }}${{ matrix.provider && format(' / {0}', matrix.provider) || '' }})
     needs:
-      - matrix-setup
-      - build-by-arch
+      - pick-services
+      - build-images
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        service: ${{ fromJSON(needs.matrix-setup.outputs.targets) }}
+        include:
+          - service: frontend
+            provider: ""
+          - service: backend
+            provider: cpu
+          - service: backend
+            provider: nvidia
+          - service: backend
+            provider: rockchip
 
     steps:
       - name: Check out repository
@@ -169,7 +219,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Read version for target
+      - name: Read image version
         id: version
         run: |
           set -euo pipefail
@@ -183,10 +233,10 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
-      - name: Download digests
+      - name: Download per-arch digests
         uses: actions/download-artifact@v8
         with:
-          pattern: digests-mnemos-${{ matrix.service }}-*
+          pattern: digests-mnemos-${{ matrix.service }}${{ matrix.provider && format('-{0}', matrix.provider) || '' }}-*
           path: /tmp/digests
           merge-multiple: true
 
@@ -200,17 +250,21 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Extract metadata for image
+      - name: Extract image tags
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ghcr.io/${{ github.repository_owner }}/mnemos-${{ matrix.service }}
+          # For the backend we publish into the per-provider repo
+          # (mnemos-backend-cpu, -nvidia, -rockchip). For the frontend
+          # the provider segment is empty, so the repo name is just
+          # mnemos-frontend.
+          images: ghcr.io/${{ github.repository_owner }}/mnemos-${{ matrix.service }}${{ matrix.provider && format('-{0}', matrix.provider) || '' }}
           tags: |
             type=semver,pattern={{version}},value=${{ steps.version.outputs.version }}
             type=raw,value=stable
           flavor: latest=auto
 
-      - name: Create manifest list and push
+      - name: Create and push multi-arch manifest list
         working-directory: /tmp/digests
         env:
           DOCKER_METADATA_OUTPUT_JSON: ${{ steps.meta.outputs.json }}
@@ -219,7 +273,7 @@ jobs:
 
           TAG_FLAGS=$(jq -r '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON")
 
-          IMAGE_NAME="ghcr.io/${{ github.repository_owner }}/mnemos-${{ matrix.service }}"
+          IMAGE_NAME="ghcr.io/${{ github.repository_owner }}/mnemos-${{ matrix.service }}${{ matrix.provider && format('-{0}', matrix.provider) || '' }}"
           IMAGE_NAME_LOWER="$(echo "$IMAGE_NAME" | tr '[:upper:]' '[:lower:]')"
 
           DIGEST_REFS=""
@@ -231,137 +285,22 @@ jobs:
 
           docker buildx imagetools create ${TAG_FLAGS} ${DIGEST_REFS}
 
-      - name: Inspect image
+      - name: Verify image in registry
         run: |
-          docker buildx imagetools inspect ghcr.io/${{ github.repository_owner }}/mnemos-${{ matrix.service }}:${{ steps.version.outputs.version }}
+          docker buildx imagetools inspect ghcr.io/${{ github.repository_owner }}/mnemos-${{ matrix.service }}${{ matrix.provider && format('-{0}', matrix.provider) || '' }}:${{ steps.version.outputs.version }}
 
-      - name: Read changelog section for this service
-        id: changelog_section
-        run: |
-          set -euo pipefail
-          # Source-of-truth split for release content:
-          #   - VERSION comes from mnemos-<service>/app/_version.py
-          #     (read earlier by the `prepare` job and re-read here
-          #     only for the docker image tag).
-          #   - NOTES come from changelog.md, which is curated by
-          #     the maintainer. Its top-level shape is plain H1-style
-          #     text (no `##` prefix), with the version line
-          #     intentionally absent (the version is in _version.py,
-          #     not the changelog):
-          #
-          #       Mnemos-Frontend
-          #       - bullet
-          #       ...
-          #
-          #       Mnemos-Backend
-          #       - bullet
-          #       ...
-          #
-          #       General
-          #       - bullet (applies to every service)
-          #
-          #       Notes
-          #       - bullet (caveats / context)
-          #
-          # We extract the matching service section, then append the
-          # General + Notes sections. If the service has no dedicated
-          # section, we fall back to General + Notes alone.
-          service="${{ matrix.service }}"
-          case "$service" in
-            frontend) heading="Mnemos-Frontend" ;;
-            backend)  heading="Mnemos-Backend"  ;;
-            *)        heading=""                ;;
-          esac
+      # Release notes are produced once, in the cut-release job,
+      # from a single source of truth (changelog.md). They are not
+      # generated per (service, provider) cell.
 
-          extract_section() {
-            # Print everything between a top-level service/General/Notes
-            # header and the next one. The version line that used to
-            # sit under each service header is no longer expected.
-            local h="$1"
-            awk -v h="$h" '
-              $0 == h {f=1; next}
-              /^Mnemos-(Frontend|Backend)$/ || /^General$/ || /^Notes$/ {f=0}
-              f {print}
-            ' changelog.md | sed '/^$/d' | head -n 200
-          }
-
-          extracted=""
-          if [[ -s changelog.md ]]; then
-            if [[ -n "$heading" ]]; then
-              extracted="$(extract_section "$heading")"
-            fi
-            general="$(extract_section "General")"
-            notes="$(extract_section "Notes")"
-            extras=""
-            [[ -n "$general" ]] && extras="${extras}${general}"$'\n\n'
-            [[ -n "$notes"   ]] && extras="${extras}${notes}"$'\n\n'
-            if [[ -n "$extracted" ]]; then
-              extracted="${extracted}"$'\n\n'"${extras}"
-            elif [[ -n "$extras" ]]; then
-              # Service has no dedicated section: use General + Notes only.
-              extracted="${extras}"
-            else
-              # Nothing structured — pass the whole file through.
-              extracted="$(cat changelog.md)"
-            fi
-          fi
-
-          printf '%s\n' "$extracted" > /tmp/changelog-section.md
-          echo "Changelog section bytes: $(wc -c < /tmp/changelog-section.md)"
-
-      - name: AI-parse changelog (optional)
-        id: ai_changelog
-        continue-on-error: true
-        # Best-effort cleanup only. The AI is asked to lightly structure
-        # the human-written section (fix typos, dedupe bullets, group
-        # by category). It MUST NOT invent changes. If the inference
-        # call fails (no token, model unavailable, timeout), the next
-        # step falls back to raw passthrough of /tmp/changelog-section.md.
-        uses: actions/ai-inference@v2
-        with:
-          model: openai/gpt-4o
-          max-tokens: 700
-          system-prompt: >-
-            You clean up a human-written release-notes section for the
-            Mnemos project (a self-hosted facial recognition stack).
-            Do NOT invent changes, do NOT add new bullets, do NOT
-            speculate. Only: fix obvious typos, deduplicate identical
-            bullets, group closely related bullets under a short
-            category heading (e.g. "### Backend", "### Frontend",
-            "### Bug fixes"). Preserve every original bullet. Return
-            plain Markdown only — no preamble, no closing remarks.
-          prompt: |
-            Service: ${{ matrix.service }}
-
-            Changelog section:
-            $(cat /tmp/changelog-section.md)
-
-      - name: Write release notes
-        env:
-          AI_NOTES_FILE: ${{ steps.ai_changelog.outputs.response-file }}
-        run: |
-          set -euo pipefail
-          {
-            echo "<!-- MNEMOS-RELEASE-CONTENT-START -->"
-            if [[ -n "${AI_NOTES_FILE:-}" && -s "$AI_NOTES_FILE" ]]; then
-              cat "$AI_NOTES_FILE"
-            elif [[ -s /tmp/changelog-section.md ]]; then
-              cat /tmp/changelog-section.md
-            else
-              echo "## Changes"
-              echo
-              echo "- Maintenance release"
-            fi
-            echo "<!-- MNEMOS-RELEASE-CONTENT-END -->"
-            echo
-            echo "## Docker image"
-            echo "\`\`\`"
-            echo "docker pull ghcr.io/${{ github.repository_owner }}/mnemos-${{ matrix.service }}:${{ steps.version.outputs.version }}"
-            echo "docker pull ghcr.io/${{ github.repository_owner }}/mnemos-${{ matrix.service }}:stable"
-            echo "\`\`\`"
-          } > release-notes.md
-
-      - name: Bundle release artifacts
+      - name: Bundle compose assets
+        # The compose zip is identical for every backend provider cell
+        # (the compose file references the per-provider image via the
+        # MNEMOS_PROVIDER env var, not by being baked into the file).
+        # Build it once for the frontend and once for the backend cpu
+        # cell to avoid duplicate artifact names. Other cells still
+        # upload their variant-qualified image-metadata.<variant>.json.
+        if: ${{ matrix.service == 'frontend' || (matrix.service == 'backend' && (matrix.provider == '' || matrix.provider == 'cpu')) }}
         run: |
           set -euo pipefail
           mkdir -p dist
@@ -370,46 +309,73 @@ jobs:
           sed "s/\${MNEMOS_TAG:-latest}/${{ steps.version.outputs.version }}/g" docker-compose.yml \
             > "dist/docker-compose.pinned.yml"
           cd dist
-          zip -r "mnemos-${{ matrix.service }}-${{ steps.version.outputs.version }}-compose.zip" \
+          zip -r "mnemos-${{ matrix.service }}${{ matrix.provider && format('-{0}', matrix.provider) || '' }}-${{ steps.version.outputs.version }}-compose.zip" \
             docker-compose.yml .env.example docker-compose.pinned.yml
           cd ..
 
-      - name: Write per-service release info
+      - name: Write per-image metadata
         env:
           SERVICE: ${{ matrix.service }}
+          PROVIDER: ${{ matrix.provider }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          image="ghcr.io/${{ github.repository_owner }}/mnemos-${SERVICE}"
+          # The image repo follows the same per-provider convention as
+          # the build job: the frontend uses a bare repo name, the
+          # backend uses mnemos-backend-<provider>.
+          if [[ -n "${PROVIDER}" ]]; then
+            image="ghcr.io/${{ github.repository_owner }}/mnemos-${SERVICE}-${PROVIDER}"
+            variant_label="${SERVICE}-${PROVIDER}"
+          else
+            image="ghcr.io/${{ github.repository_owner }}/mnemos-${SERVICE}"
+            variant_label="${SERVICE}"
+          fi
           image_ref="${image}:${VERSION}"
           image_stable="${image}:stable"
-          cat > service-info.json <<JSON
+          image_latest="${image}:latest"
+          # The metadata filename is keyed by the variant so that
+          # when the cut-release job downloads every per-image
+          # bundle with actions/download-artifact merge-multiple, the
+          # files do not clobber one another at the artifact root.
+          # A bare "image-metadata.json" would be overwritten by
+          # whichever cell finished last; the variant-qualified name
+          # below survives the merge.
+          cat > "image-metadata.${variant_label}.json" <<JSON
           {
             "service": "${SERVICE}",
+            "provider": "${PROVIDER}",
+            "variant": "${variant_label}",
             "version": "${VERSION}",
             "image": "${image_ref}",
             "image_stable": "${image_stable}",
-            "tag": "mnemos-${SERVICE}-v${VERSION}"
+            "image_latest": "${image_latest}",
+            "tag": "mnemos-${variant_label}-v${VERSION}"
           }
           JSON
-          cat service-info.json
+          cat "image-metadata.${variant_label}.json"
 
-      - name: Upload per-service release bundle
+      - name: Upload per-image bundle
         uses: actions/upload-artifact@v7
         with:
-          name: bundle-mnemos-${{ matrix.service }}-${{ steps.version.outputs.version }}
+          # The bundle is keyed by (service, provider) so the
+          # aggregator can pick up one bundle per published image.
+          # Only the canonical cells (frontend, backend/cpu) include
+          # the compose zip; every cell uploads a variant-qualified
+          # image-metadata.<variant>.json so the aggregator can list
+          # every published image ref without the files colliding
+          # during the merge-multiple download in cut-release.
+          name: bundle-mnemos-${{ matrix.service }}${{ matrix.provider && format('-{0}', matrix.provider) || '' }}-${{ steps.version.outputs.version }}
           path: |
-            dist/mnemos-${{ matrix.service }}-${{ steps.version.outputs.version }}-compose.zip
-            release-notes.md
-            service-info.json
-          if-no-files-found: error
+            dist/mnemos-${{ matrix.service }}${{ matrix.provider && format('-{0}', matrix.provider) || '' }}-${{ steps.version.outputs.version }}-compose.zip
+            image-metadata.*.json
+          if-no-files-found: warn
           retention-days: 7
 
-  release-aggregator:
-    name: Aggregate release
+  cut-release:
+    name: Cut release
     needs:
-      - matrix-setup
-      - release
+      - pick-services
+      - publish-images
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -417,14 +383,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Download every per-service bundle
+      - name: Download per-image bundles
         uses: actions/download-artifact@v8
         with:
           pattern: bundle-mnemos-*
           path: /tmp/bundles
           merge-multiple: true
 
-      - name: Compute next release version
+      - name: Compute next release tag
         id: next_version
         env:
           BUMP: ${{ inputs.bump }}
@@ -452,45 +418,122 @@ jobs:
           echo "next=${next}"
           echo "next=${next}" >> "$GITHUB_OUTPUT"
 
-      - name: Collect per-service notes and info
-        id: notes_collect
+      - name: Collect published image references
+        id: images_collect
         run: |
           set -euo pipefail
-          rm -rf /tmp/notes
-          mkdir -p /tmp/notes
-
-          if compgen -G '/tmp/bundles/bundle-mnemos-*' >/dev/null; then
-            for dir in /tmp/bundles/bundle-mnemos-*; do
-              [[ -d "$dir" ]] || continue
-              svc="$(basename "$dir" | sed -E 's/^bundle-mnemos-([^-]+)-.*/\1/')"
-              [[ -s "$dir/release-notes.md" ]] && cp "$dir/release-notes.md" "/tmp/notes/${svc}.md"
-              [[ -s "$dir/service-info.json" ]] && cp "$dir/service-info.json" "/tmp/notes/${svc}.json"
-            done
-          else
-            mapfile -t infos < <(find /tmp/bundles -maxdepth 1 -name 'service-info.json' | sort)
-            mapfile -t notes < <(find /tmp/bundles -maxdepth 1 -name 'release-notes.md'   | sort)
-            if [[ "${#infos[@]}" -ne "${#notes[@]}" ]]; then
-              echo "::error::Mismatch between service-info.json (${#infos[@]})" \
-                   "and release-notes.md (${#notes[@]}) in /tmp/bundles"
-              ls -la /tmp/bundles
-              exit 1
-            fi
-            for i in "${!infos[@]}"; do
-              svc="$(jq -r '.service' "${infos[$i]}")"
-              cp "${infos[$i]}" "/tmp/notes/${svc}.json"
-              cp "${notes[$i]}" "/tmp/notes/${svc}.md"
-            done
-          fi
-
-          if ! ls /tmp/notes/*.json >/dev/null 2>&1; then
-            echo "::error::No service info collected. Bundles:"
-            ls -la /tmp/bundles
+          rm -rf /tmp/images
+          mkdir -p /tmp/images
+          # actions/download-artifact with merge-multiple extracts
+          # every per-image bundle into /tmp/bundles/ at the same
+          # level, so there is no per-bundle subdirectory to walk.
+          # Each cell writes its metadata as image-metadata.<variant>
+          # .json, which keeps the filenames unique across cells and
+          # safe to merge.
+          shopt -s nullglob
+          meta_files=( /tmp/bundles/image-metadata.*.json )
+          shopt -u nullglob
+          if [[ ${#meta_files[@]} -eq 0 ]]; then
+            echo "::error::No per-image metadata found in /tmp/bundles"
+            ls -la /tmp/bundles || true
             exit 1
           fi
-          ls -la /tmp/notes
+          for meta in "${meta_files[@]}"; do
+            if [[ ! -s "$meta" ]]; then
+              echo "::error::Metadata file $meta is empty"
+              exit 1
+            fi
+            # The variant is encoded in the filename between the
+            # leading "image-metadata." and the trailing ".json".
+            # That mirrors the "variant" field inside the JSON, but
+            # deriving it from the filename keeps the collector
+            # independent of the JSON payload's correctness.
+            key="$(basename "$meta")"
+            key="${key#image-metadata.}"
+            key="${key%.json}"
+            cp "$meta" "/tmp/images/${key}.json"
+          done
+          echo "Collected image refs:"
+          for info in /tmp/images/*.json; do
+            jq -r '"  - \(.variant) v\(.version) -> \(.image)"' "$info"
+          done
 
-      - name: Build unified release notes (first pass)
+      - name: Load changelog from source
+        id: changelog_load
+        run: |
+          set -euo pipefail
+          if [[ ! -s changelog.md ]]; then
+            echo "::error::changelog.md is missing or empty at the repo root"
+            exit 1
+          fi
+          # changelog.md is the single source of truth for release
+          # content. It is curated by the maintainer. Its top-level
+          # shape is plain H1-style text (no '##' prefix):
+          #
+          #   Mnemos-Frontend
+          #   - bullet
+          #   ...
+          #
+          #   Mnemos-Backend
+          #   - bullet
+          #   ...
+          #
+          #   General
+          #   - bullet (applies to every service)
+          #
+          #   Notes
+          #   - bullet (caveats / context)
+          #
+          # We pass the entire file through. The next step may lightly
+          # clean it up via AI; if the AI call is unavailable, the raw
+          # file is used as-is.
+          cp changelog.md /tmp/changelog.md
+          echo "Loaded $(wc -l < /tmp/changelog.md) lines from changelog.md"
+
+      - name: Clean up notes with AI (optional)
+        id: ai_changelog
+        continue-on-error: true
+        # Best-effort cleanup only. The AI is asked to lightly
+        # structure the human-written changelog (fix obvious typos,
+        # dedupe identical bullets, group closely related bullets
+        # under a short category heading). It MUST NOT invent new
+        # content, MUST NOT speculate, MUST NOT add emojis, and
+        # MUST keep the tone professional and honest. If the
+        # inference call fails (no token, model unavailable,
+        # timeout), the next step falls back to a raw passthrough
+        # of changelog.md.
+        uses: actions/ai-inference@v2
+        with:
+          model: openai/gpt-4o
+          max-tokens: 900
+          system-prompt: >-
+            You lightly clean up a human-written changelog file for
+            the Mnemos project (a self-hosted facial recognition
+            stack). The file is the only source of truth for release
+            content; you may not invent new bullets, add features
+            that are not in the source, speculate about future
+            changes, or otherwise add material. You may not remove
+            any original bullet. You may not add emojis, decorative
+            punctuation, marketing language, or any text that was
+            not in the source. The tone must remain professional,
+            factual, and honest. Allowed edits are limited to:
+            fixing obvious typos, deduplicating identical bullets,
+            normalising bullet punctuation, and grouping closely
+            related bullets under a short category heading such as
+            "### Bug fixes" or "### Documentation". Preserve the
+            existing top-level section headings (Mnemos-Frontend,
+            Mnemos-Backend, General, Notes) exactly. Return plain
+            Markdown only — no preamble, no closing remarks, no
+            code fences around the whole document.
+          prompt: |
+            Clean up the following changelog. Do not invent content.
+            Do not add emojis. Keep the tone professional and honest.
+
+            $(cat /tmp/changelog.md)
+
+      - name: Compose unified release notes
         env:
+          AI_NOTES_FILE: ${{ steps.ai_changelog.outputs.response-file }}
           NEXT_VERSION: ${{ steps.next_version.outputs.next }}
         run: |
           set -euo pipefail
@@ -499,58 +542,38 @@ jobs:
             echo
             echo "Self-hosted facial recognition stack — backend, frontend, and pgvector."
             echo
-            echo "### Services in this release"
-            echo
-            for info in /tmp/notes/*.json; do
-              [[ -f "$info" ]] || continue
-              svc="$(jq -r '.service' "$info")"
-              ver="$(jq -r '.version' "$info")"
-              echo "* **mnemos-${svc}** v${ver}"
-            done
-            echo
             echo "### Changes"
             echo
-            for note in /tmp/notes/*.md; do
-              [[ -s "$note" ]] || continue
-              svc="$(basename "$note" .md)"
-              {
-                echo "#### mnemos-${svc}"
-                echo
-                sed -n '/<!-- MNEMOS-RELEASE-CONTENT-START -->/,/<!-- MNEMOS-RELEASE-CONTENT-END -->/p' "$note" \
-                  | sed -e '1d' -e '$d' \
-                  | awk '
-                    BEGIN { }
-                    /^# /  { sub(/^# /, ""); print; next }
-                    /^## / { sub(/^## /, "##### "); print; next }
-                    /^### / { sub(/^### /, "###### "); print; next }
-                    /^#### / { sub(/^#### /, "####### "); print; next }
-                    { print }
-                  '
-                echo
-              }
-            done
+            if [[ -n "${AI_NOTES_FILE:-}" && -s "$AI_NOTES_FILE" ]]; then
+              cat "$AI_NOTES_FILE"
+            else
+              cat /tmp/changelog.md
+            fi
+            echo
             echo "### Docker images"
             echo
-            for info in /tmp/notes/*.json; do
+            echo "| Service | Version | Image |"
+            echo "|---------|---------|-------|"
+            for info in $(ls /tmp/images/*.json | sort); do
               [[ -f "$info" ]] || continue
+              variant="$(jq -r '.variant' "$info")"
+              ver="$(jq -r '.version' "$info")"
               img="$(jq -r '.image' "$info")"
-              img_stable="$(jq -r '.image_stable' "$info")"
-              echo "* \`${img}\`"
-              echo "* \`${img_stable}\`"
+              echo "| \`mnemos-${variant}\` | v${ver} | \`${img}\` |"
             done
             echo
             echo "### Install / upgrade"
             echo
             echo '```bash'
-            echo "curl -L [https://github.com/$](https://github.com/$){{ github.repository }}/releases/download/${NEXT_VERSION}/docker-compose.yml -o docker-compose.yml"
-            echo "curl -L [https://github.com/$](https://github.com/$){{ github.repository }}/releases/download/${NEXT_VERSION}/.env.example -o .env.example"
-            echo "cp .env.example .env   # then edit secrets"
+            echo "curl -L https://github.com/${{ github.repository }}/releases/download/${NEXT_VERSION}/docker-compose.yml -o docker-compose.yml"
+            echo "curl -L https://github.com/${{ github.repository }}/releases/download/${NEXT_VERSION}/.env.example -o .env.example"
+            echo "cp .env.example .env   # then edit secrets (set MNEMOS_PROVIDER=cpu|nvidia|rockchip)"
             echo "docker compose pull && docker compose up -d"
             echo '```'
           } > release-notes.md
           echo "Wrote release-notes.md ($(wc -l < release-notes.md) lines)"
 
-      - name: Second pass — dedupe bullets and re-render
+      - name: Deduplicate release notes
         run: |
           set -euo pipefail
           tmp="$(mktemp)"
@@ -569,71 +592,27 @@ jobs:
           mv "$tmp" release-notes.md
           echo "After dedupe: $(wc -l < release-notes.md) lines"
 
-      - name: Sanity-scan release notes
+      - name: Sanity-check release notes
         run: |
           set -euo pipefail
           fail=0
 
-          if grep -q '^### Docker images$' release-notes.md; then
-            if ! awk '/^### Docker images$/{f=1;next} /^### /{f=0} f && NF>0' \
-                 release-notes.md | grep -q '.'; then
-              echo "::error::Docker images section is empty"
-              fail=1
-            fi
-          else
+          if ! grep -q '^### Docker images$' release-notes.md; then
             echo "::error::Missing '### Docker images' section"
             fail=1
           fi
-
-          dup_in_section="$(awk '
-            /^### / {
-              if (section != "") {
-                for (i in seen) {
-                  if (seen[i] > 1) print section ": " i
-                }
-              }
-              section = $0; delete seen; next
-            }
-            /`ghcr\.io\/[^`]+`/ {
-              match($0, /`ghcr\.io\/[^`]+`/);
-              ref = substr($0, RSTART+1, RLENGTH-2);
-              seen[ref]++
-            }
-            END {
-              if (section != "") {
-                for (i in seen) {
-                  if (seen[i] > 1) print section ": " i
-                }
-              }
-            }
-          ' release-notes.md || true)"
-          if [[ -n "$dup_in_section" ]]; then
-            echo "::error::Duplicate image refs within a section:"
-            echo "$dup_in_section"
+          if ! grep -q '^### Changes$' release-notes.md; then
+            echo "::error::Missing '### Changes' section"
             fail=1
           fi
 
-          for info in /tmp/notes/*.json; do
+          for info in /tmp/images/*.json; do
             [[ -f "$info" ]] || continue
-            svc="$(jq -r '.service' "$info")"
-            if ! grep -q "mnemos-${svc}" release-notes.md; then
-              echo "::error::Release notes do not mention service: ${svc}"
+            img="$(jq -r '.image' "$info")"
+            if ! grep -qF "$img" release-notes.md; then
+              echo "::error::Release notes missing image ref: ${img}"
               fail=1
             fi
-          done
-
-          for note in /tmp/notes/*.json; do
-            [[ -f "$note" ]] || continue
-            svc="$(jq -r '.service' "$note")"
-            awk -v s="#### mnemos-${svc}" '
-              $0 == s {f=1; next}
-              /^#### / {f=0}
-              f && NF > 0 {found=1; exit}
-              END {exit !found}
-            ' release-notes.md || {
-              echo "::error::Empty section for service ${svc}"
-              fail=1
-            }
           done
 
           if [[ "$fail" -ne 0 ]]; then
@@ -644,7 +623,7 @@ jobs:
           fi
           echo "Release notes pass sanity scan."
 
-      - name: Build unified release assets
+      - name: Build release assets
         run: |
           set -euo pipefail
           mkdir -p dist
@@ -659,7 +638,7 @@ jobs:
           cd ..
           ls -la dist
 
-      - name: Create unified GitHub release
+      - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.next_version.outputs.next }}
@@ -678,20 +657,7 @@ jobs:
               --target "${{ github.sha }}"
           fi
 
-      - name: Update `stable` pointer
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.next_version.outputs.next }}
-        run: |
-          set -euo pipefail
-          for info in /tmp/notes/*.json; do
-            [[ -f "$info" ]] || continue
-            svc="$(jq -r '.service' "$info")"
-            ver="$(jq -r '.version' "$info")"
-            echo "Image tag for ${svc} is unchanged: mnemos-${svc}-v${ver} (stable: mnemos-${svc}:stable)."
-          done
-
-      - name: Summary
+      - name: Write run summary
         env:
           NEXT: ${{ steps.next_version.outputs.next }}
           BUMP: ${{ inputs.bump }}
@@ -701,11 +667,11 @@ jobs:
             echo "## Mnemos ${NEXT}"
             echo
             echo "* Bump: \`${BUMP}\`"
-            for info in /tmp/notes/*.json; do
+            for info in $(ls /tmp/images/*.json | sort); do
               [[ -f "$info" ]] || continue
-              svc="$(jq -r '.service' "$info")"
+              variant="$(jq -r '.variant' "$info")"
               ver="$(jq -r '.version' "$info")"
-              echo "* mnemos-${svc}: v${ver}"
+              echo "* mnemos-${variant}: v${ver}"
             done
             echo "* Release: https://github.com/${{ github.repository }}/releases/tag/${NEXT}"
           } >> "$GITHUB_STEP_SUMMARY"

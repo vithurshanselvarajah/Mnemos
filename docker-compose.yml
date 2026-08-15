@@ -25,7 +25,7 @@ services:
   # Override MNEMOS_PROVIDER at deploy time to switch inference backend.
   # ---------------------------------------------------------------------------
   mnemos-backend:
-    image: ghcr.io/vithurshanselvarajah/mnemos-backend:${MNEMOS_TAG:-latest}-${MNEMOS_PROVIDER:-cpu}
+    image: ghcr.io/vithurshanselvarajah/mnemos-backend-${MNEMOS_PROVIDER:-cpu}:${MNEMOS_TAG:-latest}
     container_name: mnemos-backend
     restart: unless-stopped
     depends_on:
@@ -65,9 +65,9 @@ services:
    #           capabilities: [gpu]
    
    # Uncomment the following lines to enable Rockchip RKNN support for the backend container
-   #  devices:
-   #    - /dev/dri/renderD129:/dev/dri/renderD129
-      
+   # devices:
+   #   - /dev/dri/renderD129:/dev/dri/renderD129
+
   # ---------------------------------------------------------------------------
   # Mnemos frontend (Server-rendered management UI)
   # ---------------------------------------------------------------------------

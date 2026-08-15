@@ -71,8 +71,8 @@ services:
    #           capabilities: [gpu]
    
    # Uncomment the following lines to enable Rockchip RKNN support for the backend container
-   #  devices:
-   #    - /dev/dri/renderD129:/dev/dri/renderD129
+   # devices:
+   #   - /dev/dri/renderD129:/dev/dri/renderD129
 
   # ---------------------------------------------------------------------------
   # Mnemos frontend (Server-rendered management UI)

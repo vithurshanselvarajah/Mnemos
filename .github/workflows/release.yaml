@@ -293,13 +293,18 @@ jobs:
       # from a single source of truth (changelog.md). They are not
       # generated per (service, provider) cell.
 
-      - name: Bundle compose assets
-        # The compose zip is identical for every backend provider cell
+      - name: Stage compose assets
+        # The compose bundle is identical for every backend provider cell
         # (the compose file references the per-provider image via the
         # MNEMOS_PROVIDER env var, not by being baked into the file).
-        # Build it once for the frontend and once for the backend cpu
+        # Stage it once for the frontend and once for the backend cpu
         # cell to avoid duplicate artifact names. Other cells still
         # upload their variant-qualified image-metadata.<variant>.json.
+        #
+        # The three files are uploaded as raw artifacts (not zipped) so
+        # the GitHub release can attach them directly and the install
+        # instructions in docs/Installation.md and docs/Quick-Start.md
+        # (which use /releases/latest/download/<file>) keep working.
         if: ${{ matrix.service == 'frontend' || (matrix.service == 'backend' && (matrix.provider == '' || matrix.provider == 'cpu')) }}
         run: |
           set -euo pipefail
@@ -308,10 +313,6 @@ jobs:
           cp .env.example "dist/.env.example"
           sed "s/\${MNEMOS_TAG:-latest}/${{ steps.version.outputs.version }}/g" docker-compose.yml \
             > "dist/docker-compose.pinned.yml"
-          cd dist
-          zip -r "mnemos-${{ matrix.service }}${{ matrix.provider && format('-{0}', matrix.provider) || '' }}-${{ steps.version.outputs.version }}-compose.zip" \
-            docker-compose.yml .env.example docker-compose.pinned.yml
-          cd ..
 
       - name: Write per-image metadata
         env:
@@ -360,13 +361,15 @@ jobs:
           # The bundle is keyed by (service, provider) so the
           # aggregator can pick up one bundle per published image.
           # Only the canonical cells (frontend, backend/cpu) include
-          # the compose zip; every cell uploads a variant-qualified
+          # the compose files; every cell uploads a variant-qualified
           # image-metadata.<variant>.json so the aggregator can list
           # every published image ref without the files colliding
           # during the merge-multiple download in cut-release.
           name: bundle-mnemos-${{ matrix.service }}${{ matrix.provider && format('-{0}', matrix.provider) || '' }}-${{ steps.version.outputs.version }}
           path: |
-            dist/mnemos-${{ matrix.service }}${{ matrix.provider && format('-{0}', matrix.provider) || '' }}-${{ steps.version.outputs.version }}-compose.zip
+            dist/docker-compose.yml
+            dist/.env.example
+            dist/docker-compose.pinned.yml
             image-metadata.*.json
           if-no-files-found: warn
           retention-days: 7
@@ -624,18 +627,20 @@ jobs:
           echo "Release notes pass sanity scan."
 
       - name: Build release assets
+        # Attach the three compose files as raw release assets, not
+        # inside a zip. This matches the install instructions in
+        # docs/Installation.md and docs/Quick-Start.md, which already
+        # point users at:
+        #   https://github.com/<owner>/Mnemos/releases/latest/download/docker-compose.yml
+        #   https://github.com/<owner>/Mnemos/releases/latest/download/.env.example
+        # Zipping them would break those direct-download URLs.
         run: |
           set -euo pipefail
           mkdir -p dist
           cp docker-compose.yml dist/docker-compose.yml
           cp .env.example dist/.env.example
-          pinned="dist/docker-compose.pinned.yml"
           sed "s/\${MNEMOS_TAG:-latest}/${{ steps.next_version.outputs.next }}/g" \
-            docker-compose.yml > "$pinned"
-          cd dist
-          zip -r "mnemos-${{ steps.next_version.outputs.next }}-compose.zip" \
-            docker-compose.yml .env.example docker-compose.pinned.yml
-          cd ..
+            docker-compose.yml > dist/docker-compose.pinned.yml
           ls -la dist
 
       - name: Create or update GitHub release
@@ -647,11 +652,15 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists — uploading assets only."
             gh release upload "$TAG" \
-              "dist/mnemos-${TAG}-compose.zip" \
+              "dist/docker-compose.yml" \
+              "dist/.env.example" \
+              "dist/docker-compose.pinned.yml" \
               --clobber
           else
             gh release create "$TAG" \
-              "dist/mnemos-${TAG}-compose.zip" \
+              "dist/docker-compose.yml" \
+              "dist/.env.example" \
+              "dist/docker-compose.pinned.yml" \
               --title "Mnemos ${TAG}" \
               --notes-file release-notes.md \
               --target "${{ github.sha }}"

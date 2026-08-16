@@ -273,15 +273,20 @@ def test_search_similar_executes_query(fake_psycopg):
 
 def test_search_similar_returns_rows_from_fake_cursor(fake_psycopg):
     """When the fake cursor's fetchall returns rows, search_similar
-    should shape them into dicts with the expected keys."""
+    should shape them into dicts with the expected keys. pgvector returns
+    UUIDs in canonical 36-char dashed form; search_similar must strip the
+    dashes so the result matches the compact 32-char form used by SQLite
+    Person/FaceCrop tables."""
     from app.services import vector_repo
 
-    pid = str(uuid.uuid4())
-    cid = str(uuid.uuid4())
+    pid_dashed = str(uuid.uuid4())
+    cid_dashed = str(uuid.uuid4())
+    pid_compact = pid_dashed.replace("-", "")
+    cid_compact = cid_dashed.replace("-", "")
 
     class _RowCursor(_FakeCursor):
         def fetchall(self):
-            return [(pid, cid, True, 0.92)]
+            return [(pid_dashed, cid_dashed, True, 0.92)]
 
     class _ConnWithRows(FakeConn):
         def cursor(self):
@@ -291,10 +296,44 @@ def test_search_similar_returns_rows_from_fake_cursor(fake_psycopg):
     emb = np.ones(512, dtype=np.float32)
     out = vector_repo.search_similar(emb, "buffalo_s", limit=5)
     assert len(out) == 1
-    assert out[0]["person_id"] == pid
-    assert out[0]["crop_id"] == cid
+    assert out[0]["person_id"] == pid_compact
+    assert out[0]["crop_id"] == cid_compact
     assert out[0]["is_averaged"] is True
     assert out[0]["similarity"] >= 0.92
+
+
+def test_search_similar_strips_dashes_from_pgvector_uuids(fake_psycopg):
+    """Regression: pgvector returns UUIDs in canonical 36-char form with dashes
+    (e.g. '78e12e13-d79f-4ba4-8ba5-cfad6138c01a'). The Person/FaceCrop tables in
+    SQLite store the 32-char compact form. search_similar must strip the dashes
+    so the caller can pass the IDs straight into SQLAlchemy session.get() lookups
+    — otherwise _match() in identify.py fails to find the Person and returns None
+    for every face, even when the similarity is well above the threshold."""
+    from app.services import vector_repo
+
+    pid_dashed = "78e12e13-d79f-4ba4-8ba5-cfad6138c01a"
+    cid_dashed = "634a01a3-f8a4-4161-8dbc-2a046527a671"
+    pid_compact = pid_dashed.replace("-", "")
+    cid_compact = cid_dashed.replace("-", "")
+
+    class _RowCursor(_FakeCursor):
+        def fetchall(self):
+            return [(pid_dashed, cid_dashed, True, 0.94)]
+
+    class _ConnWithRows(FakeConn):
+        def cursor(self):
+            return _RowCursor(self)
+
+    fake_psycopg["scripted"].append(_ConnWithRows())
+    emb = np.ones(512, dtype=np.float32)
+    out = vector_repo.search_similar(emb, "buffalo_l", limit=5)
+    assert len(out) == 1
+    # Dashes must be stripped so callers can session.get(Person, person_id)
+    # against the SQLite Person table which stores compact 32-char UUIDs.
+    assert out[0]["person_id"] == pid_compact
+    assert out[0]["crop_id"] == cid_compact
+    assert "-" not in out[0]["person_id"]
+    assert "-" not in out[0]["crop_id"]
 
 
 def test_search_similar_is_avg_boost(fake_psycopg):

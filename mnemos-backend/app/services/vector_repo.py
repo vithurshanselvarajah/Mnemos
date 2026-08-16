@@ -213,10 +213,17 @@ def search_similar(
         is_avg = bool(r[2])
         if is_avg:
             sim = min(1.0, sim + 1e-6)
+        # pgvector returns UUIDs in canonical 36-char form with dashes (e.g.
+        # "78e12e13-d79f-4ba4-8ba5-cfad6138c01a"). The Person / FaceCrop tables
+        # in SQLite store the 32-char compact form (e.g.
+        # "78e12e13d79f4ba48ba5cfad6138c01a"). Strip the dashes so the caller
+        # can pass these IDs straight into SQLAlchemy `session.get()` lookups.
+        person_id = r[0].replace("-", "") if r[0] else r[0]
+        crop_id = r[1].replace("-", "") if r[1] else r[1]
         out.append(
             {
-                "person_id": r[0],
-                "crop_id": r[1],
+                "person_id": person_id,
+                "crop_id": crop_id,
                 "is_averaged": is_avg,
                 "similarity": sim,
             }

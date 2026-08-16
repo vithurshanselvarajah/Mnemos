@@ -22,7 +22,6 @@ class User(SQLModel, table=True):
 
     id: str = Field(
         default_factory=_uuid32,
-
         sa_column=Column("id", CHAR(32), primary_key=True),
     )
     username: str = Field(index=True, unique=True)
@@ -36,7 +35,6 @@ class Session(SQLModel, table=True):
 
     id: str = Field(
         default_factory=_uuid32,
-
         sa_column=Column("id", CHAR(32), primary_key=True),
     )
     user_id: str = Field(
@@ -52,7 +50,6 @@ class BackendNode(SQLModel, table=True):
 
     id: str = Field(
         default_factory=_uuid32,
-
         sa_column=Column("id", CHAR(32), primary_key=True),
     )
     name: str
@@ -72,7 +69,6 @@ class BackupSettings(SQLModel, table=True):
 
     id: str = Field(
         default_factory=_uuid32,
-
         sa_column=Column("id", CHAR(32), primary_key=True),
     )
     enabled: bool = Field(default=False)

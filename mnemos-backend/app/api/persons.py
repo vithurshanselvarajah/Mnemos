@@ -106,9 +106,7 @@ def create_person(req: PersonCreate, _: ApiKey = Depends(require_full_admin)) ->
         "name collides with an existing person. Requires a Full-Admin API key."
     ),
 )
-def update_person(
-    person_id: str, req: PersonUpdate, _: ApiKey = Depends(require_full_admin)
-) -> PersonOut:
+def update_person(person_id: str, req: PersonUpdate, _: ApiKey = Depends(require_full_admin)) -> PersonOut:
     with session_scope() as s:
         p = s.get(Person, person_id)
         if p is None:

@@ -40,9 +40,7 @@ def discover(package_path: str) -> list[Migration]:
         name = getattr(module, "NAME", None)
         upgrade = getattr(module, "upgrade", None)
         if version is None or name is None or upgrade is None:
-            raise RuntimeError(
-                f"migration module {mod_info.name} must define VERSION, NAME, upgrade()"
-            )
+            raise RuntimeError(f"migration module {mod_info.name} must define VERSION, NAME, upgrade()")
         migrations.append(Migration(version=int(version), name=str(name), upgrade=upgrade))
     migrations.sort(key=lambda m: m.version)
     return migrations

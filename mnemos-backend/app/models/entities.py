@@ -29,7 +29,6 @@ class ApiKey(SQLModel, table=True):
 
     id: str = Field(
         default_factory=_uuid32,
-
         sa_column=Column("id", CHAR(32), primary_key=True),
     )
     name: str
@@ -47,7 +46,6 @@ class Person(SQLModel, table=True):
 
     id: str = Field(
         default_factory=_uuid32,
-
         sa_column=Column("id", CHAR(32), primary_key=True),
     )
     name: str = Field(index=True)
@@ -61,7 +59,6 @@ class FaceCrop(SQLModel, table=True):
 
     id: str = Field(
         default_factory=_uuid32,
-
         sa_column=Column("id", CHAR(32), primary_key=True),
     )
     person_id: str | None = Field(

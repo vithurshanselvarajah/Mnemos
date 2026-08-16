@@ -2,10 +2,10 @@ Mnemos-Frontend
 - None
 
 Mnemos-Backend
-- None
+- UID format mismatch between pgvector (returns canonical 36-char dashed UUIDs) and SQLite (stores 32-char compact UUIDs). Fixed by stripping dashes from values stored in pgvector
 
 General
-- Add missing migrations for both backend and frontend causing breakage when upgrading from V1 to V2
+- Update changelog to fix restrictive Rockchip NPU binding
 
 Notes
-- If you are upgrading from V1 please upgrade to V2.0.1 to fix issues with db error. 
+- Fixes issue related to Rockchip variant correctly detecting faces but failing to identify

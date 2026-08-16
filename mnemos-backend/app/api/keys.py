@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -97,7 +96,7 @@ def create_key(req: ApiKeyCreate, _: ApiKey = Depends(require_full_admin)) -> Ap
         "any future request. The row is kept for audit. Requires a Full-Admin API key."
     ),
 )
-def revoke_key(key_id: uuid.UUID, _: ApiKey = Depends(require_full_admin)) -> ApiKeyOut:
+def revoke_key(key_id: str, _: ApiKey = Depends(require_full_admin)) -> ApiKeyOut:
     with session_scope() as s:
         row = s.get(ApiKey, key_id)
         if row is None:
@@ -116,7 +115,7 @@ def revoke_key(key_id: uuid.UUID, _: ApiKey = Depends(require_full_admin)) -> Ap
     summary="Delete an API key",
     description="Hard-deletes the API key. Requires a Full-Admin API key.",
 )
-def delete_key(key_id: uuid.UUID, _: ApiKey = Depends(require_full_admin)) -> dict:
+def delete_key(key_id: str, _: ApiKey = Depends(require_full_admin)) -> dict:
     with session_scope() as s:
         row = s.get(ApiKey, key_id)
         if row is None:

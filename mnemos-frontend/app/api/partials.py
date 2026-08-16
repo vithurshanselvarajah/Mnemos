@@ -140,16 +140,12 @@ async def partial_users_create(request: Request):
 @router.delete("/users/{user_id}", response_class=HTMLResponse)
 def partial_users_delete(user_id: str, request: Request):
     admin = _require_admin(request)
-    from uuid import UUID
-
-    try:
-        uid = UUID(user_id)
-    except ValueError:
+    if not user_id or len(user_id) != 32:
         return HTMLResponse("<div class='error'>bad id</div>", status_code=400)
-    if uid == admin.id:
+    if user_id == admin.id:
         return HTMLResponse("<div class='error'>cannot delete yourself</div>", status_code=400)
     with session_scope() as s:
-        u = s.get(User, uid)
+        u = s.get(User, user_id)
         if u is not None:
             s.delete(u)
         users = s.execute(select(User).order_by(User.created_at.desc())).scalars().all()

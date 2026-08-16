@@ -8,6 +8,7 @@ Thanks for wanting to make Mnemos better. This page covers the workflow, code st
 - [Development setup](#development-setup)
 - [Code style](#code-style)
 - [Testing](#testing)
+- [Database migrations](#database-migrations)
 - [Commit messages](#commit-messages)
 - [Pull request process](#pull-request-process)
 - [Release process](#release-process)
@@ -74,6 +75,64 @@ Every PR should include tests for the new behaviour. See [Testing](https://githu
 - `ruff format --check .` — code is formatted
 
 If you're fixing a bug, add a regression test that fails on `main` and passes on your branch. If you're adding an endpoint, add a happy-path test and at least one failure-mode test.
+
+## Database migrations
+
+Both `mnemos-backend` and `mnemos-frontend` use the same lightweight migration runner — no Alembic, no `alembic_version` table out of the box. Migrations are versioned files under `app/db/migrations/`, auto-discovered on startup, and tracked in a `schema_version` table inside the same SQLite database.
+
+### How it works
+
+```
+mnemos-backend/app/db/migrations/
+├── __init__.py
+├── runner.py          # discovers + applies pending migrations
+├── 0001_pairing_key.py # each migration is one ALTER TABLE (or similar)
+├── 0002_...
+```
+
+On every `init_db()` call, the runner:
+
+1. Creates the `schema_version(version, name, applied_at)` table if it doesn't exist.
+2. Reads `MAX(version)` of already-applied migrations.
+3. Runs every migration file whose `VERSION` is greater than the highest applied version, in order.
+4. Records each successful upgrade into `schema_version`.
+
+A migration's `upgrade()` is also wrapped in a `try/except` that swallows `duplicate column name` and `already exists` errors. This makes the runner robust against a fresh V2 install where `SQLModel.metadata.create_all()` has already created the full V2 schema — the ALTER TABLE is a no-op, but the version row is still recorded so a later V1→V2 upgrade of a V1 database correctly picks up the migration.
+
+### Adding a new migration
+
+1. Pick the next integer version. Check the existing files in `app/db/migrations/`.
+2. Create `app/db/migrations/NNNN_short_name.py` with this shape:
+
+    ```python
+    from sqlalchemy import text
+
+    VERSION = 2
+    NAME = "add persons.notes column"
+
+
+    def upgrade(conn) -> None:
+        conn.execute(text("ALTER TABLE persons ADD COLUMN notes TEXT"))
+    ```
+
+3. Update the matching model in `app/models/entities.py` so a fresh `create_all()` also produces the new column. The migration is the V1→V2 upgrade path; the model change is the V2-fresh-install path.
+4. Add a regression test in `tests/backend/test_db_session.py` (or `tests/frontend/test_frontend_db.py`) that:
+   - Creates a V1-shaped DB.
+   - Calls `init_db()`.
+   - Asserts the new column exists and existing rows still read back correctly.
+   - Asserts `schema_version` contains your new version.
+5. Run the full suite: `pytest tests/`.
+
+### Conventions
+
+- Migration files are matched by the `NNN_` prefix. Anything that doesn't start with four digits followed by an underscore is ignored (so `runner.py` and `__init__.py` won't be treated as migrations).
+- Versions are monotonically increasing integers. Don't reuse a version.
+- Keep migrations small and idempotent. If a migration needs data backfill, do it in the same `upgrade()` and make the SQL robust to "already done" (e.g. `WHERE NOT EXISTS`).
+- Never modify a migration after it has been merged to `main`. If you need to change behaviour, add a new migration.
+
+### Why no Alembic?
+
+Each service has a single SQLite database with a small, stable schema. Alembic is overkill for this scale, and adopting it would have meant a bigger refactor (new dependency, new `env.py`, new CI wiring) for no real benefit. The runner above is ~80 lines and does exactly what Mnemos needs: track applied versions, apply pending ones, be safe to re-run. If the project ever grows to a second engineer + a Postgres + a more complex schema, the path to Alembic is straightforward — port the existing `0001_*` migration to an Alembic revision, set `alembic_version` to `1`, and retire the runner.
 
 ## Commit messages
 

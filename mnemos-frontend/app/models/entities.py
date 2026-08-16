@@ -2,9 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from uuid import UUID, uuid4
+from uuid import uuid4
 
+from sqlalchemy import CHAR, Column
 from sqlmodel import Field, SQLModel
+
+
+def _uuid32() -> str:
+    return uuid4().hex
 
 
 class UserRole(StrEnum):
@@ -15,7 +20,11 @@ class UserRole(StrEnum):
 class User(SQLModel, table=True):
     __tablename__ = "users"
 
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    id: str = Field(
+        default_factory=_uuid32,
+
+        sa_column=Column("id", CHAR(32), primary_key=True),
+    )
     username: str = Field(index=True, unique=True)
     password_hash: str
     role: str = Field(default=UserRole.OPERATOR.value)
@@ -25,8 +34,14 @@ class User(SQLModel, table=True):
 class Session(SQLModel, table=True):
     __tablename__ = "sessions"
 
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
-    user_id: UUID = Field(foreign_key="users.id", index=True)
+    id: str = Field(
+        default_factory=_uuid32,
+
+        sa_column=Column("id", CHAR(32), primary_key=True),
+    )
+    user_id: str = Field(
+        sa_column=Column("user_id", CHAR(32), index=True),
+    )
     session_token: str = Field(index=True, unique=True)
     expires_at: datetime
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -35,7 +50,11 @@ class Session(SQLModel, table=True):
 class BackendNode(SQLModel, table=True):
     __tablename__ = "backend_nodes"
 
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    id: str = Field(
+        default_factory=_uuid32,
+
+        sa_column=Column("id", CHAR(32), primary_key=True),
+    )
     name: str
     base_url: str
     api_key: str
@@ -51,7 +70,11 @@ class BackupCadence(StrEnum):
 class BackupSettings(SQLModel, table=True):
     __tablename__ = "backup_settings"
 
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    id: str = Field(
+        default_factory=_uuid32,
+
+        sa_column=Column("id", CHAR(32), primary_key=True),
+    )
     enabled: bool = Field(default=False)
     cadence: str = Field(default=BackupCadence.DAILY.value)
     hour_utc: int = Field(default=3, ge=0, le=23)

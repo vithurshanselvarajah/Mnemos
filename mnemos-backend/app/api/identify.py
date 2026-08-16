@@ -87,7 +87,7 @@ def _find_duplicate_crop(
     embedding: np.ndarray,
     image_sha: str,
     bbox: tuple[float, float, float, float],
-) -> uuid.UUID | None:
+) -> str | None:
     with session_scope() as s:
         if image_sha:
             existing = (
@@ -125,7 +125,7 @@ def _find_duplicate_crop(
                 continue
             if float(n["similarity"]) >= (1.0 - _CROSS_IMG_COSINE_DIST):
                 try:
-                    crop_id = uuid.UUID(str(crop_id_str))
+                    crop_id = str(crop_id_str)
                 except ValueError:
                     continue
                 row = s.get(FaceCrop, crop_id)
@@ -146,7 +146,7 @@ def _read_image(data: bytes) -> np.ndarray:
     return img
 
 
-def _custom_threshold_for(person_id: uuid.UUID | None) -> float | None:
+def _custom_threshold_for(person_id: str | None) -> float | None:
     if person_id is None:
         return None
     with session_scope() as s:
@@ -164,13 +164,13 @@ def _match(embedding: np.ndarray, model: str, base_threshold: float) -> Identify
     sim = float(best["similarity"])
     dist = 1.0 - sim
     threshold = base_threshold
-    custom = _custom_threshold_for(uuid.UUID(best["person_id"]))
+    custom = _custom_threshold_for(str(best["person_id"]))
     if custom is not None:
         threshold = custom
     if dist > threshold:
         return None
     with session_scope() as s:
-        p = s.get(Person, uuid.UUID(best["person_id"]))
+        p = s.get(Person, str(best["person_id"]))
         if p is None:
             return None
         best_crop = (
@@ -274,7 +274,7 @@ async def identify(request: Request, file: UploadFile = File(...)) -> IdentifyRe
         except Exception as e:
             log.warning("crop failed: %s", e)
             continue
-        crop_id = uuid.uuid4()
+        crop_id = uuid.uuid4().hex
         with session_scope() as s:
             s.add(
                 FaceCrop(

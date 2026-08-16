@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import os
 from contextlib import contextmanager
 
@@ -8,8 +7,6 @@ from sqlalchemy.engine import Engine
 from sqlmodel import Session as SQLModelSession, SQLModel, create_engine
 
 from app.core.config import settings
-
-log = logging.getLogger("mnemos.db")
 
 _engine: Engine | None = None
 
@@ -38,25 +35,10 @@ def get_engine() -> Engine:
 def init_db() -> None:
     eng = get_engine()
     SQLModel.metadata.create_all(eng)
-    _migrate(eng)
+    from app.db.migrations import runner
 
-
-def _migrate(eng) -> None:
-    from sqlalchemy import text
-
-    additions = [
-        ("face_crops", "image_sha", "VARCHAR(64)"),
-    ]
-    with eng.begin() as conn:
-        for table, col, decl in additions:
-            try:
-                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {decl}"))
-                log.info("migration: added %s.%s", table, col)
-            except Exception as e:
-                if "duplicate column" in str(e).lower() or "already exists" in str(e).lower():
-                    continue
-                raise
-    log.info("backend SQLite schema ensured at %s", settings.db_path)
+    migrations = runner.discover("app.db.migrations")
+    runner.run(eng, migrations)
 
 
 def reset_engine() -> None:

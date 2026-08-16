@@ -2,9 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from uuid import UUID, uuid4
+from uuid import uuid4
 
+from sqlalchemy import CHAR, Column
 from sqlmodel import Field, SQLModel
+
+
+def _uuid32() -> str:
+    return uuid4().hex
 
 
 class PermissionLevel(StrEnum):
@@ -22,7 +27,11 @@ class FaceCropStatus(StrEnum):
 class ApiKey(SQLModel, table=True):
     __tablename__ = "api_keys"
 
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    id: str = Field(
+        default_factory=_uuid32,
+
+        sa_column=Column("id", CHAR(32), primary_key=True),
+    )
     name: str
     key_hash: str = Field(index=True, unique=True)
     key_prefix: str
@@ -30,20 +39,17 @@ class ApiKey(SQLModel, table=True):
     expires_at: datetime | None = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     revoked_at: datetime | None = None
-    is_pairing_key: bool = Field(
-        default=False,
-        description=(
-            "True when this key was minted by /system/pair to bootstrap the "
-            "frontend↔backend link. Pairing keys are hidden from the keys list "
-            "and cannot be revoked or deleted via the keys API."
-        ),
-    )
+    is_pairing_key: bool = Field(default=False)
 
 
 class Person(SQLModel, table=True):
     __tablename__ = "persons"
 
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    id: str = Field(
+        default_factory=_uuid32,
+
+        sa_column=Column("id", CHAR(32), primary_key=True),
+    )
     name: str = Field(index=True)
     custom_threshold: float | None = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -53,8 +59,15 @@ class Person(SQLModel, table=True):
 class FaceCrop(SQLModel, table=True):
     __tablename__ = "face_crops"
 
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
-    person_id: UUID | None = Field(default=None, index=True, foreign_key="persons.id")
+    id: str = Field(
+        default_factory=_uuid32,
+
+        sa_column=Column("id", CHAR(32), primary_key=True),
+    )
+    person_id: str | None = Field(
+        default=None,
+        sa_column=Column("person_id", CHAR(32), index=True),
+    )
     file_path: str
     bounding_box: str
     det_score: float = Field(default=0.0)

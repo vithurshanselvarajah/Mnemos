@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from sqlalchemy import inspect, text
 
@@ -130,3 +132,77 @@ def test_get_engine_is_singleton(backend_imports):
     session_mod.reset_engine()
     e3 = session_mod.get_engine()
     assert e3 is not e1
+
+
+def test_migrations_table_is_created(backend_imports):
+    from sqlalchemy import inspect
+
+    import app.models.entities  # noqa: F401
+    from app.db.session import get_engine, init_db
+
+    init_db()
+    eng = get_engine()
+    names = {n.lower() for n in inspect(eng).get_table_names()}
+    assert "schema_version" in names
+
+
+def test_migrations_track_applied_versions(backend_imports):
+    from sqlalchemy import text
+
+    import app.models.entities  # noqa: F401
+    from app.db.session import get_engine, init_db
+
+    init_db()
+    eng = get_engine()
+    with eng.connect() as c:
+        rows = c.execute(text("SELECT version, name FROM schema_version ORDER BY version")).all()
+    versions = [int(r[0]) for r in rows]
+    assert versions == sorted(versions)
+    assert all(name for _, name in rows)
+
+
+def test_init_db_is_idempotent_after_migrations(backend_imports):
+    from sqlalchemy import text
+
+    import app.models.entities  # noqa: F401
+    from app.db.session import get_engine, init_db
+
+    init_db()
+    eng = get_engine()
+    with eng.connect() as c:
+        first = sorted(r[0] for r in c.execute(text("SELECT version FROM schema_version")).all())
+    init_db()
+    with eng.connect() as c:
+        second = sorted(r[0] for r in c.execute(text("SELECT version FROM schema_version")).all())
+    assert first == second
+
+
+def test_v1_db_gets_pairing_key_column(backend_imports, tmp_path):
+    import shutil
+
+    from sqlalchemy import text
+
+    from app.core import config
+    from app.core.config import set_settings
+    from app.db.session import get_engine, init_db, reset_engine
+
+    v1_db = Path("/home/vithusel/Downloads/backend.db")
+    if not v1_db.exists():
+        pytest.skip("V1 reference database not present at /home/vithusel/Downloads/backend.db")
+    target = tmp_path / "backend.db"
+    shutil.copy(v1_db, target)
+    set_settings(config.Settings(db_path=str(target)))
+    reset_engine()
+    init_db()
+    eng = get_engine()
+    with eng.connect() as c:
+        cols = {row[1] for row in c.execute(text("PRAGMA table_info(api_keys)")).all()}
+    assert "is_pairing_key" in cols
+    with eng.connect() as c:
+        versions = [int(r[0]) for r in c.execute(text("SELECT version FROM schema_version")).all()]
+    assert 1 in versions
+    with eng.connect() as c:
+        rows = c.execute(text("SELECT name, is_pairing_key FROM api_keys")).all()
+    assert len(rows) == 2
+    for _name, is_pairing in rows:
+        assert int(is_pairing) == 0

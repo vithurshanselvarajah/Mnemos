@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import uuid
 from contextlib import suppress
 from datetime import datetime
 
@@ -136,7 +135,7 @@ def assign_faces(req: AssignRequest):
     }
 
 
-def _rebuild_person_averaged(person_id: uuid.UUID, model_name: str) -> None:
+def _rebuild_person_averaged(person_id: str, model_name: str) -> None:
     with session_scope() as s:
         crops = (
             s.execute(

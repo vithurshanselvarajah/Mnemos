@@ -59,7 +59,7 @@ def _user_by_session(token: str) -> User | None:
         return user
 
 
-def issue_session(user_id: uuid.UUID, *, remember: bool) -> tuple[str, int]:
+def issue_session(user_id: str, *, remember: bool) -> tuple[str, int]:
     token = uuid.uuid4().hex + uuid.uuid4().hex
     if remember:
         expires = datetime.utcnow() + timedelta(days=settings.remember_days)

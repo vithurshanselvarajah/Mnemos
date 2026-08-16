@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import os
-import uuid
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
@@ -34,7 +33,7 @@ def get_crop(filename: str) -> Response:
     if not filename.endswith(".jpg"):
         raise HTTPException(status_code=404, detail="not found")
     try:
-        crop_id = uuid.UUID(filename[:-4])
+        crop_id = str(filename[:-4])
     except ValueError:
         raise HTTPException(status_code=404, detail="not found")
     with session_scope() as s:

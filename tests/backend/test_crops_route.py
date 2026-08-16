@@ -47,7 +47,7 @@ def _insert_crop(tmp_root, crop_id, rel_path="abc.jpg"):
 def test_get_crop_returns_jpeg_bytes(api_client, tmp_root, unique_name):
     from uuid import uuid4
 
-    cid = uuid4()
+    cid = uuid4().hex
     rel = f"{cid}.jpg"
     _insert_crop(tmp_root, cid, rel)
     tc, key = api_client
@@ -68,7 +68,7 @@ def test_get_crop_404_for_unknown_id(api_client, unique_name):
 def test_get_crop_404_when_file_missing_on_disk(api_client, tmp_root, unique_name):
     from uuid import uuid4
 
-    cid = uuid4()
+    cid = uuid4().hex
     _insert_crop(tmp_root, cid, f"{cid}.jpg")
     (tmp_root / "crops" / f"{cid}.jpg").unlink()
     tc, key = api_client
@@ -99,7 +99,7 @@ def test_get_crop_requires_api_key(api_client, unique_name):
 def test_get_crop_sets_cache_control(api_client, tmp_root, unique_name):
     from uuid import uuid4
 
-    cid = uuid4()
+    cid = uuid4().hex
     rel = f"{cid}.jpg"
     _insert_crop(tmp_root, cid, rel)
     tc, key = api_client

@@ -186,7 +186,7 @@ def test_assign_unknown_crop_returns_404(api_client, unique_name):
     ).json()
     r = client.post(
         "/api/v1/faces/assign",
-        json={"crop_ids": [str(uuid4())], "person_id": person["id"]},
+        json={"crop_ids": [uuid4().hex], "person_id": person["id"]},
         headers={"X-API-Key": key},
     )
     assert r.status_code == 404
@@ -196,7 +196,7 @@ def test_assign_creates_new_person_when_name_provided(api_client, unique_name):
     from uuid import uuid4
 
     client, key = api_client
-    fake_crop_id = str(uuid4())
+    fake_crop_id = uuid4().hex
     r = client.post(
         "/api/v1/faces/assign",
         json={"crop_ids": [fake_crop_id], "new_person_name": unique_name},
@@ -211,7 +211,7 @@ def test_assign_requires_target(api_client):
     client, key = api_client
     r = client.post(
         "/api/v1/faces/assign",
-        json={"crop_ids": [str(uuid4())]},
+        json={"crop_ids": [uuid4().hex]},
         headers={"X-API-Key": key},
     )
     assert r.status_code == 400

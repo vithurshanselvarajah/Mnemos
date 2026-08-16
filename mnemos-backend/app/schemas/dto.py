@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -14,7 +13,7 @@ class BoundingBox(BaseModel):
 
 
 class IdentifyMatch(BaseModel):
-    person_id: UUID
+    person_id: str
     name: str
     confidence: float = Field(ge=0.0, le=1.0)
     image_url: str | None = None
@@ -22,7 +21,7 @@ class IdentifyMatch(BaseModel):
 
 
 class IdentifyUnknownFace(BaseModel):
-    crop_id: UUID
+    crop_id: str
     image_url: str
     bounding_box: BoundingBox
     det_score: float
@@ -36,7 +35,7 @@ class IdentifyResponse(BaseModel):
 
 
 class PersonOut(BaseModel):
-    id: UUID
+    id: str
     name: str
     custom_threshold: float | None = None
     sample_count: int = 0
@@ -57,8 +56,8 @@ class PersonUpdate(BaseModel):
 
 
 class FaceCropOut(BaseModel):
-    id: UUID
-    person_id: UUID | None = None
+    id: str
+    person_id: str | None = None
     image_url: str
     bounding_box: list[float]
     det_score: float
@@ -74,17 +73,17 @@ class UnassignedPage(BaseModel):
 
 
 class AssignRequest(BaseModel):
-    crop_ids: list[UUID]
-    person_id: UUID | None = None
+    crop_ids: list[str]
+    person_id: str | None = None
     new_person_name: str | None = None
 
 
 class MarkNonFaceRequest(BaseModel):
-    crop_ids: list[UUID]
+    crop_ids: list[str]
 
 
 class IgnoreRequest(BaseModel):
-    crop_ids: list[UUID]
+    crop_ids: list[str]
 
 
 class ModelInfo(BaseModel):
@@ -124,7 +123,7 @@ class ModelAvailable(BaseModel):
 
 
 class ApiKeyOut(BaseModel):
-    id: UUID
+    id: str
     name: str
     key_prefix: str
     permission_level: str
@@ -157,7 +156,7 @@ class PairRequest(BaseModel):
 
 
 class PairResponse(BaseModel):
-    api_key_id: UUID
+    api_key_id: str
     key_prefix: str
     raw_key: str
 

@@ -38,7 +38,7 @@ def _add_crop(tmp_root, name="crop.jpg", bbox=(0, 0, 10, 10)):
     (tmp_root / "crops").mkdir(parents=True, exist_ok=True)
     (tmp_root / "crops" / name).write_bytes(b"\xff\xd8\xff")
     eng = get_engine()
-    cid = uuid4()
+    cid = uuid4().hex
     with Session(eng) as s:
         s.add(
             FaceCrop(
@@ -161,7 +161,7 @@ def test_assign_404_for_unknown_crop(api_client, unique_name):
     tc, key = api_client
     r = tc.post(
         "/api/v1/faces/assign",
-        json={"crop_ids": [str(uuid4())], "person_id": str(person_id)},
+        json={"crop_ids": [uuid4().hex], "person_id": str(person_id)},
         headers={"X-API-Key": key},
     )
     assert r.status_code == 404
@@ -172,7 +172,7 @@ def test_assign_404_for_unknown_person(api_client, tmp_root):
     tc, key = api_client
     r = tc.post(
         "/api/v1/faces/assign",
-        json={"crop_ids": [str(cid)], "person_id": str(uuid4())},
+        json={"crop_ids": [str(cid)], "person_id": uuid4().hex},
         headers={"X-API-Key": key},
     )
     assert r.status_code == 404

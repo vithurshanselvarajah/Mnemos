@@ -105,7 +105,7 @@ def test_require_admin_raises_for_non_admin(fe_setup):
     from app.db.session import session_scope
     from app.models.entities import User, UserRole
 
-    op_id = uuid.uuid4()
+    op_id = uuid.uuid4().hex
     with session_scope() as s:
         s.add(User(id=op_id, username="op", password_hash=hash_password("op"), role=UserRole.OPERATOR.value))
 

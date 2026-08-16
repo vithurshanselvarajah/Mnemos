@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import os
 from contextlib import contextmanager
 
@@ -8,8 +7,6 @@ from sqlalchemy.engine import Engine
 from sqlmodel import Session as SQLModelSession, SQLModel, create_engine
 
 from app.core.config import settings
-
-log = logging.getLogger("mnemos.frontend.db")
 
 _engine: Engine | None = None
 
@@ -32,6 +29,10 @@ def get_engine() -> Engine:
 def init_db() -> None:
     eng = get_engine()
     SQLModel.metadata.create_all(eng)
+    from app.db.migrations import runner
+
+    migrations = runner.discover("app.db.migrations")
+    runner.run(eng, migrations)
 
 
 def reset_engine() -> None:

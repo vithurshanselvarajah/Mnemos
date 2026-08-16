@@ -280,13 +280,13 @@ def test_partial_users_delete_other(admin_logged_in):
     with session_scope() as s:
         s.add(
             User(
-                id=uuid_mod.uuid4(),
+                id=uuid_mod.uuid4().hex,
                 username="victim",
                 password_hash=hash_password("longpassword"),
                 role=UserRole.OPERATOR.value,
             )
         )
-    r = tc.delete(f"/partials/users/{uuid_mod.uuid4()}")
+    r = tc.delete(f"/partials/users/{uuid_mod.uuid4().hex}")
     assert r.status_code == 200
 
 

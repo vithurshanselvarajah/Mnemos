@@ -197,7 +197,7 @@ async def proxy_persons_post(request: Request):
 
 
 @router.patch("/persons/{person_id}")
-async def proxy_persons_patch(person_id: UUID, request: Request):
+async def proxy_persons_patch(person_id: str, request: Request):
     require_admin(request)
     payload = await request.json()
     from app.services.backend_client import request
@@ -207,7 +207,7 @@ async def proxy_persons_patch(person_id: UUID, request: Request):
 
 
 @router.delete("/persons/{person_id}")
-def proxy_persons_delete(person_id: UUID, request: Request):
+def proxy_persons_delete(person_id: str, request: Request):
     require_admin(request)
     from app.services.backend_client import request
 
@@ -216,7 +216,7 @@ def proxy_persons_delete(person_id: UUID, request: Request):
 
 
 @router.delete("/persons/{person_id}/crops/{crop_id}")
-def proxy_person_crop_delete(person_id: UUID, crop_id: UUID, request: Request):
+def proxy_person_crop_delete(person_id: str, crop_id: str, request: Request):
     require_admin(request)
     from app.services.backend_client import request
 
@@ -283,7 +283,7 @@ async def proxy_keys_post(request: Request):
 
 
 @router.post("/keys/{key_id}/revoke")
-def proxy_keys_revoke(key_id: UUID):
+def proxy_keys_revoke(key_id: str):
     from app.services.backend_client import request
 
     r = request("POST", f"/api/v1/keys/{key_id}/revoke")
@@ -291,7 +291,7 @@ def proxy_keys_revoke(key_id: UUID):
 
 
 @router.delete("/keys/{key_id}")
-def proxy_keys_delete(key_id: UUID):
+def proxy_keys_delete(key_id: str):
     from app.services.backend_client import request
 
     r = request("DELETE", f"/api/v1/keys/{key_id}")

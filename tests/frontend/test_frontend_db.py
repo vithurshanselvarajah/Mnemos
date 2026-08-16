@@ -102,7 +102,7 @@ def test_session_create_and_query(fe_db):
     from app.db.session import session_scope
     from app.models.entities import Session, User, UserRole
 
-    user_id = uuid.uuid4()
+    user_id = uuid.uuid4().hex
     with session_scope() as s:
         s.add(User(id=user_id, username="carol", password_hash="x", role=UserRole.OPERATOR.value))
         s.add(

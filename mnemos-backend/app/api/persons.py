@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
@@ -18,7 +17,7 @@ router = APIRouter(prefix="/persons", tags=["persons"])
 log = logging.getLogger("mnemos.persons")
 
 
-def _best_crop_for(s, person_id: uuid.UUID) -> FaceCrop | None:
+def _best_crop_for(s, person_id: str) -> FaceCrop | None:
     return (
         s.execute(
             select(FaceCrop)
@@ -108,7 +107,7 @@ def create_person(req: PersonCreate, _: ApiKey = Depends(require_full_admin)) ->
     ),
 )
 def update_person(
-    person_id: uuid.UUID, req: PersonUpdate, _: ApiKey = Depends(require_full_admin)
+    person_id: str, req: PersonUpdate, _: ApiKey = Depends(require_full_admin)
 ) -> PersonOut:
     with session_scope() as s:
         p = s.get(Person, person_id)
@@ -152,7 +151,7 @@ def update_person(
         "Requires a Full-Admin API key."
     ),
 )
-def delete_person(person_id: uuid.UUID, _: ApiKey = Depends(require_full_admin)) -> dict:
+def delete_person(person_id: str, _: ApiKey = Depends(require_full_admin)) -> dict:
     with session_scope() as s:
         p = s.get(Person, person_id)
         if p is None:
@@ -201,7 +200,7 @@ def _crop_to_out(c: FaceCrop) -> FaceCropOut:
     summary="Get a person",
     description="Returns a single person with their current sample count, best score, and thumbnail URL.",
 )
-def get_person(person_id: uuid.UUID) -> PersonOut:
+def get_person(person_id: str) -> PersonOut:
     with session_scope() as s:
         p = s.get(Person, person_id)
         if p is None:
@@ -219,7 +218,7 @@ def get_person(person_id: uuid.UUID) -> PersonOut:
         "then creation time. Used to render the person's photos page."
     ),
 )
-def list_person_crops(person_id: uuid.UUID) -> list[FaceCropOut]:
+def list_person_crops(person_id: str) -> list[FaceCropOut]:
     with session_scope() as s:
         p = s.get(Person, person_id)
         if p is None:
@@ -250,8 +249,8 @@ def list_person_crops(person_id: uuid.UUID) -> list[FaceCropOut]:
     ),
 )
 def delete_person_crop(
-    person_id: uuid.UUID,
-    crop_id: uuid.UUID,
+    person_id: str,
+    crop_id: str,
     _: ApiKey = Depends(require_full_admin),
 ) -> dict:
     with session_scope() as s:

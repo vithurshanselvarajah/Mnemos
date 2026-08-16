@@ -72,7 +72,7 @@ services:
    
    # Uncomment the following lines to enable Rockchip RKNN support for the backend container
    # devices:
-   #   - /dev/dri/renderD129:/dev/dri/renderD129
+   #   - /dev/dri:/dev/dri
 
   # ---------------------------------------------------------------------------
   # Mnemos frontend (Server-rendered management UI)

@@ -317,7 +317,7 @@ jobs:
         # by category). It MUST NOT invent changes. If the inference
         # call fails (no token, model unavailable, timeout), the next
         # step falls back to raw passthrough of /tmp/changelog-section.md.
-        uses: actions/ai-inference@v2
+        uses: actions/ai-inference@v3
         with:
           model: openai/gpt-4o
           max-tokens: 700

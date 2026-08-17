@@ -4,7 +4,7 @@ python-multipart==0.0.32
 pydantic==2.13.4
 pydantic-settings==2.15.0
 sqlmodel==0.0.39
-SQLAlchemy==2.0.51
+SQLAlchemy==2.0.52
 psycopg[binary]==3.3.4
 numpy==2.5.1
 Pillow==12.3.0
